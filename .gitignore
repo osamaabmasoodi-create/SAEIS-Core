@@ -1,0 +1,20 @@
+# Node dependencies
+node_modules/
+.pnpm-store/
+
+# Python temporary files
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+
+# System & Editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Environment variables & secrets
+.env
+*.log
