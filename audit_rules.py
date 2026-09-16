@@ -1,82 +1,71 @@
 import pandas as pd
 
-def check_entry_balance(df):
-    """التحقق من توازن إجمالي المدين والدائن للقيود"""
-    total_debit = df['debit'].sum()
-    total_credit = df['credit'].sum()
-    is_balanced = round(total_debit, 2) == round(total_credit, 2)
-    return is_balanced, abs(total_debit - total_credit)
+def check_unbalanced_entries(df):
+    """فحص توازن القيود: إجمالي المدين يجب أن يساوي إجمالي الدائن لكل قيد."""
+    grouped = df.groupby('entry_id')[['debit', 'credit']].sum()
+    unbalanced = grouped[grouped['debit'] != grouped['credit']]
+    results = []
+    for entry_id, row in unbalanced.iterrows():
+        results.append({
+            'rule': 'Unbalanced Entry (ميزان القيد)',
+            'entry_id': entry_id,
+            'details': f"Total Debit ({row['debit']}) != Total Credit ({row['credit']})",
+            'severity': 'High'
+        })
+    return results
 
-def find_duplicate_entries(df):
-    """كشف القيود المكررة بنفس المبلغ والتاريخ والحساب"""
+def check_duplicate_entries(df):
+    """فحص القيود المكررة بنفس المبلغ والحساب والتاريخ."""
     duplicates = df[df.duplicated(subset=['date', 'account_id', 'debit', 'credit'], keep=False)]
-    return duplicates
+    results = []
+    if not duplicates.empty:
+        for entry_id in duplicates['entry_id'].unique():
+            results.append({
+                'rule': 'Duplicate Entry (قيد مكرر)',
+                'entry_id': entry_id,
+                'details': "Identical transaction parameters detected",
+                'severity': 'Medium'
+            })
+    return results
+
+def check_ifrs9_ecl(df, threshold_days=90):
+    """فحص مخصص الخسائر الائتمانية المتوقعة (IFRS 9 - Financial Instruments)."""
+    results = []
+    if 'days_overdue' in df.columns:
+        overdue = df[(df['days_overdue'] > threshold_days) & (df['debit'] > 0)]
+        for _, row in overdue.iterrows():
+            results.append({
+                'rule': 'IFRS 9 - ECL Provision Warning',
+                'entry_id': row['entry_id'],
+                'details': f"Receivable overdue by {row['days_overdue']} days without provision check",
+                'severity': 'High'
+            })
+    return results
+
+def check_ias36_impairment(df):
+    """فحص مؤشرات هبوط قيمة الأصول (IAS 36 - Impairment of Assets)."""
+    results = []
+    if 'carrying_amount' in df.columns and 'recoverable_amount' in df.columns:
+        impaired = df[df['carrying_amount'] > df['recoverable_amount']]
+        for _, row in impaired.iterrows():
+            results.append({
+                'rule': 'IAS 36 - Asset Impairment Required',
+                'entry_id': row['entry_id'],
+                'details': f"Carrying amount ({row['carrying_amount']}) exceeds Recoverable amount ({row['recoverable_amount']})",
+                'severity': 'High'
+            })
+    return results
 
 def run_audit_checks(df):
-    """تشغيل الفحوصات الأساسية لنظام SAEIS"""
-    balanced, diff = check_entry_balance(df)
-    duplicates = find_duplicate_entries(df)
+    """تشغيل جميع قواعد الفحص والتدقيق المحاسبي المتقدم."""
+    all_issues = []
+    all_issues.extend(check_unbalanced_entries(df))
+    all_issues.extend(check_duplicate_entries(df))
+    all_issues.extend(check_ifrs9_ecl(df))
+    all_issues.extend(check_ias36_impairment(df))
     
-    print(f"--- نتائج تدقيق SAEIS ---")
-    print(f"توازن القيود: {'متوازن' if balanced else f'غير متوازن بفارق {diff}'}")
-    print(f"عدد العمليات المكررة: {len(duplicates)}")
-    
-    return {
-        'is_balanced': balanced,
-        'difference': diff,
-        'duplicates_count': len(duplicates)
-    }import pandas as pd
-import numpy as np
-
-def check_entry_balance(df):
-    """التحقق من توازن إجمالي المدين والدائن للقيود"""
-    total_debit = df['debit'].sum()
-    total_credit = df['credit'].sum()
-    is_balanced = round(total_debit, 2) == round(total_credit, 2)
-    return is_balanced, abs(total_debit - total_credit)
-
-def find_duplicate_entries(df):
-    """كشف القيود المكررة بنفس المبلغ والتاريخ والحساب"""
-    duplicates = df[df.duplicated(subset=['date', 'account_id', 'debit', 'credit'], keep=False)]
-    return duplicates
-
-def check_negative_balances(df, asset_accounts=['1010', '1020']):
-    """كشف الأرصدة السالبة في حسابات الأصول والنقدية"""
-    df['net_amount'] = df['debit'] - df['credit']
-    account_balances = df.groupby('account_id')['net_amount'].sum()
-    negative_assets = account_balances[(account_balances.index.isin(asset_accounts)) & (account_balances < 0)]
-    return negative_assets
-
-def detect_anomalies_zscore(df, threshold=2.0):
-    """كشف المبالغ الشاذة باستخدام Z-Score للقيم المالية"""
-    amounts = df['debit'].replace(0, np.nan).fillna(df['credit'])
-    mean = amounts.mean()
-    std = amounts.std()
-    
-    if std == 0 or np.isnan(std):
-        return pd.DataFrame()
+    print(f"--- Completed Audit Run: Found {len(all_issues)} issues ---")
+    for issue in all_issues:
+        print(f"[{issue['severity']}] {issue['rule']} - Entry #{issue['entry_id']}: {issue['details']}")
         
-    z_scores = (amounts - mean) / std
-    anomalies = df[z_scores.abs() > threshold]
-    return anomalies
-
-def run_audit_checks(df):
-    """تشغيل كافة فحوصات التدقيق الذكي لنظام SAEIS"""
-    balanced, diff = check_entry_balance(df)
-    duplicates = find_duplicate_entries(df)
-    negative_balances = check_negative_balances(df)
-    anomalies = detect_anomalies_zscore(df)
-    
-    print(f"--- نتائج تدقيق SAEIS المتقدمة ---")
-    print(f"توازن القيود: {'متوازن' if balanced else f'غير متوازن بفارق {diff}'}")
-    print(f"عدد العمليات المكررة: {len(duplicates)}")
-    print(f"حسابات الأصول ذات الأرصدة السالبة: {len(negative_balances)}")
-    print(f"عدد المعاملات ذات المبالغ الشاذة (Anomalies): {len(anomalies)}")
-    
-    return {
-        'is_balanced': balanced,
-        'difference': diff,
-        'duplicates_count': len(duplicates),
-        'negative_balances_count': len(negative_balances),
-        'anomalies_count': len(anomalies)
-    }
+    return pd.DataFrame(all_issues)
