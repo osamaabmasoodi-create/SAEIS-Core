@@ -4,19 +4,46 @@ import pandas as pd
 import report_exporter
 import streamlit as st
 
+# إعداد صفحة التطبيق مع الشعار والعنوان
 st.set_page_config(
-    page_title="SAEIS - Smart Audit & ERP System", page_icon="📊", layout="wide"
+    page_title="SAEIS | Smart Audit & ERP System", page_icon="🛡️", layout="wide"
 )
 
-st.title("📊 نظام التدقيق المحاسبي الذكي - SAEIS")
-st.markdown(
-    "فحص القيود المحاسبية، كشف الشواذ، والتأكد من الامتثال لمعايير التقارير"
-    " المالية الدولية (IFRS / IAS)"
-)
+# ترويسة البرنامج والهوية البصرية
+col_logo, col_title = st.columns([1, 6])
+with col_logo:
+  st.markdown(
+      "<h1"
+      ' style="text-align: center; font-size: 50px; margin: 0;">🛡️</h1>',
+      unsafe_allow_html=True,
+  )
+with col_title:
+  st.markdown(
+      "<h2 style='margin-bottom: 0px; color: #1E3A8A;'>نظام التدقيق المحاسبي"
+      " الذكي (SAEIS-Core)</h2>",
+      unsafe_allow_html=True,
+  )
+  st.markdown(
+      "<p style='color: #4B5563; margin-top: 0px;'>منصة أتمتة التدقيق المالي"
+      " والتحقق من الامتثال لمعايير التقارير المالية الدولية (IAS / IFRS)</p>",
+      unsafe_allow_html=True,
+  )
 
-st.sidebar.header("إعدادات المدخلات")
+st.markdown("---")
+
+# القائمة الجانبية المنسقة
+st.sidebar.markdown(
+    "<h3 style='color: #1E3A8A;'>⚙️ إعدادات النظام</h3>", unsafe_allow_html=True
+)
 uploaded_file = st.sidebar.file_uploader(
-    "قم برفع ملف البيانات المحاسبية (Excel أو CSV)", type=["xlsx", "csv"]
+    "📁 رفع ملف البيانات المحاسبية (Excel أو CSV)", type=["xlsx", "csv"]
+)
+
+st.sidebar.markdown("---")
+st.sidebar.markdown(
+    "<p style='font-size: 12px; color: #6B7280; text-align:"
+    " center;'><b>SAEIS-Core v1.1</b><br>تطوير: أسامة عباس عبده<br>© 2026</p>",
+    unsafe_allow_html=True,
 )
 
 if uploaded_file is not None:
@@ -26,48 +53,78 @@ if uploaded_file is not None:
     else:
       df = pd.read_excel(uploaded_file)
 
-    st.success("تم تحميل البيانات بنجاح")
-    st.subheader("📋 معاينة البيانات المرفوعة")
-    st.dataframe(df.head())
+    st.sidebar.success("✅ تم قراءة الملف بنجاح")
 
-    if st.button("تشغيل التدقيق الفوري"):
-      with st.spinner("جاري تنفيذ خوارزميات التدقيق واكتشاف الشوائب..."):
+    with st.expander("📋 معاينة البيانات المحاسبية الأساسية", expanded=False):
+      st.dataframe(df.head(10), use_container_width=True)
+
+    if st.button("🚀 تشغيل محرك التدقيق والامتثال الشامل", use_container_width=True):
+      with st.spinner(
+          "جاري تحليل الحسابات واكتشاف الشواذ ومقارنتها بمعايير IAS/IFRS..."
+      ):
         audit_results = audit_rules.run_audit_checks(df)
 
         st.markdown("---")
-        st.subheader(" نتائج التدقيق المحاسبي")
+        st.subheader("📊 لوحة مؤشرات نتائج التدقيق")
+
+        # حساب عدد الحالات المكتشفة لكل فحص لعرضها في بطاقات إحصائية
+        c1, c2, c3, c4, c5 = st.columns(5)
+        unbalanced_count = len(audit_results.get("unbalanced", []))
+        duplicates_count = len(audit_results.get("duplicates", []))
+        neg_count = len(audit_results.get("negative_balances", []))
+        anomaly_count = len(audit_results.get("anomalies", []))
+        ias1_count = len(audit_results.get("ias1_compliance", []))
+
+        c1.metric(
+            "قيود غير متوازنة",
+            unbalanced_count,
+            delta="مخالفة" if unbalanced_count > 0 else "سليم",
+            delta_color="inverse",
+        )
+        c2.metric("قيود مكررة", duplicates_count)
+        c3.metric("أرصدة سالبة", neg_count)
+        c4.metric("قيم شاذة", anomaly_count)
+        c5.metric("مخالفات IAS 1", ias1_count)
+
+        st.markdown("---")
+        st.subheader("🔍 تفاصيل نتائج التدقيق والامتثال المعياري")
 
         for key, title in [
             ("unbalanced", "القيود غير المتوازنة (مدين ≠ دائن)"),
-            ("duplicates", "القيود المكررة"),
-            ("negative_balances", "الأرصدة السالبة في الأصول"),
-            ("anomalies", "القيم الشاذة (Anomalies)"),
+            ("duplicates", "القيود المحاسبية المكررة"),
+            ("negative_balances", "الأرصدة السالبة في حسابات الأصول"),
+            ("anomalies", "القيم الشاذة المرتفعة (Anomalies)"),
             (
                 "ias1_compliance",
-                "مخالفات معيار العرض والافصاح المالي (IAS 1 - تبويب"
+                "مخالفات معيار العرض والإفصاح المالي (IAS 1 - تبويب"
                 " الأصول/النقدية)",
             ),
         ]:
           res_data = audit_results.get(key)
           if isinstance(res_data, pd.DataFrame) and not res_data.empty:
-            st.warning(f"⚠️ تم رصد حالات في: {title}")
-            st.dataframe(res_data)
+            st.warning(f"⚠️ تم رصد حالات تستدعي المراجعة في: {title}")
+            st.dataframe(res_data, use_container_width=True)
           else:
-            st.success(f"✅ لا توجد مشاكل في: {title}")
+            st.success(f"✅ لا توجد ملاحظات في: {title}")
 
-        # تصدير التقرير
+        st.markdown("---")
+        # زر تصدير التقرير بتنسيق احترافي
         report_file = report_exporter.generate_audit_report(df)
         with open(report_file, "rb") as f:
           st.download_button(
-              label="📥 تحميل تقرير التدقيق الشامل (Excel)",
+              label="📥 تحميل تقرير التدقيق الشامل والمعتمد (Excel)",
               data=f,
               file_name="SAEIS_Audit_Report.xlsx",
               mime=(
                   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
               ),
+              use_container_width=True,
           )
 
   except Exception as e:
     st.error(f"حدث خطأ أثناء قراءة الملف: {e}")
 else:
-  st.info("الرجاء رفع ملف المحاسبة من القائمة الجانبية للبدء.")
+  st.info(
+      "👈 الرجاء رفع ملف البيانات المحاسبية بصيغة Excel أو CSV من القائمة الجانبية"
+      " للبدء."
+  )
