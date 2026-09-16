@@ -4,32 +4,21 @@ import pandas as pd
 import report_exporter
 import streamlit as st
 
-# إعداد صفحة التطبيق مع الشعار والعنوان
+# إعداد صفحة التطبيق
 st.set_page_config(
-    page_title="SAEIS | Smart Audit & ERP System", page_icon="🛡️", layout="wide"
+    page_title="SAEIS | Smart Audit & ERP System", page_icon="📊", layout="wide"
 )
 
-# ترويسة البرنامج والهوية البصرية
-col_logo, col_title = st.columns([1, 6])
-with col_logo:
-  st.markdown(
-      "<h1"
-      ' style="text-align: center; font-size: 50px; margin: 0;">🛡️</h1>',
-      unsafe_allow_html=True,
-  )
-with col_title:
-  st.markdown(
-      "<h2 style='margin-bottom: 0px; color: #1E3A8A;'>نظام التدقيق المحاسبي"
-      " الذكي (SAEIS-Core)</h2>",
-      unsafe_allow_html=True,
-  )
-  st.markdown(
-      "<p style='color: #4B5563; margin-top: 0px;'>منصة أتمتة التدقيق المالي"
-      " والتحقق من الامتثال لمعايير التقارير المالية الدولية (IAS / IFRS)</p>",
-      unsafe_allow_html=True,
-  )
-
-st.markdown("---")
+# ترويسة احترافية مع تصميم بصري (Header Banner)
+st.markdown(
+    """
+    <div style="background: linear-gradient(135deg, #1E3A8A 0%, #3B82F6 100%); padding: 20px; border-radius: 12px; color: white; margin-bottom: 25px;">
+        <h1 style="margin: 0; font-size: 28px; font-weight: bold;">📊 نظام التدقيق المحاسبي الذكي (SAEIS-Core)</h1>
+        <p style="margin: 5px 0 0 0; font-size: 15px; opacity: 0.9;">منصة أتمتة التدقيق المالي، كشف الشواذ، والتحقق من الامتثال لمعايير التقارير المالية الدولية (IAS / IFRS)</p>
+    </div>
+""",
+    unsafe_allow_html=True,
+)
 
 # القائمة الجانبية المنسقة
 st.sidebar.markdown(
