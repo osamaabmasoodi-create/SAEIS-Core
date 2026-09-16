@@ -1,47 +1,47 @@
 import pandas as pd
 
 
-def check_unbalanced_entries(df):
-  if (
-      not df.empty
-      and "Entry_ID" in df.columns
-      and "Debit" in df.columns
-      and "Credit" in df.columns
-  ):
+def run_audit_checks(df):
+  """تنفذ كافة قواعد التدقيق وتدمج النتائج في جدول واحد يحتوي على نوع المخالفة"""
+  if df.empty:
+    return pd.DataFrame(columns=list(df.columns) + ["Audit_Issue"])
+
+  issues_list = []
+
+  # 1. القيود غير المتوازنة (مدين ≠ دائن)
+  if "Entry_ID" in df.columns and "Debit" in df.columns and "Credit" in df.columns:
     grouped = df.groupby("Entry_ID")[["Debit", "Credit"]].sum()
-    unbalanced = grouped[grouped["Debit"] != grouped["Credit"]]
-    if not unbalanced.empty:
-      return df[df["Entry_ID"].isin(unbalanced.index)]
-  return pd.DataFrame(columns=df.columns if not df.empty else [])
+    unbalanced_ids = grouped[grouped["Debit"] != grouped["Credit"]].index
+    if len(unbalanced_ids) > 0:
+      unbal_df = df[df["Entry_ID"].isin(unbalanced_ids)].copy()
+      unbal_df["Audit_Issue"] = "قيد غير متوازن (مدين ≠ دائن)"
+      issues_list.append(unbal_df)
 
+  # 2. القيود المكررة
+  dup_df = df[df.duplicated(keep=False)].copy()
+  if not dup_df.empty:
+    dup_df["Audit_Issue"] = "قيد مكرر بالكامل"
+    issues_list.append(dup_df)
 
-def check_duplicate_entries(df):
-  if not df.empty:
-    return df[df.duplicated(keep=False)]
-  return pd.DataFrame(columns=df.columns if not df.empty else [])
+  # 3. الأرصدة السالبة
+  if "Balance" in df.columns:
+    neg_df = df[df["Balance"] < 0].copy()
+    if not neg_df.empty:
+      neg_df["Audit_Issue"] = "رصيد سالب في الأصل"
+      issues_list.append(neg_df)
 
-
-def check_negative_balances(df):
-  if not df.empty and "Balance" in df.columns:
-    return df[df["Balance"] < 0]
-  return pd.DataFrame(columns=df.columns if not df.empty else [])
-
-
-def detect_anomalies_zscore(df):
-  if not df.empty and "Amount" in df.columns and len(df) > 1:
+  # 4. الشواذ الإحصائية (Z-score)
+  if "Amount" in df.columns and len(df) > 1:
     mean = df["Amount"].mean()
     std = df["Amount"].std()
     if std > 0:
-      return df[abs(df["Amount"] - mean) > (3 * std)]
-  return pd.DataFrame(columns=df.columns if not df.empty else [])
+      anom_df = df[abs(df["Amount"] - mean) > (3 * std)].copy()
+      if not anom_df.empty:
+        anom_df["Audit_Issue"] = "قيمة شاذة (Anomalies)"
+        issues_list.append(anom_df)
 
+  if issues_list:
+    combined = pd.concat(issues_list).drop_duplicates()
+    return combined
 
-def run_audit_checks(df):
-  """الدالة الشاملة التي يستدعيها app.py"""
-  results = {
-      "unbalanced": check_unbalanced_entries(df),
-      "duplicates": check_duplicate_entries(df),
-      "negative_balances": check_negative_balances(df),
-      "anomalies": detect_anomalies_zscore(df),
-  }
-  return results
+  return pd.DataFrame(columns=list(df.columns) + ["Audit_Issue"])
