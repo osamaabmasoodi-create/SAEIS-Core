@@ -10,7 +10,7 @@ st.set_page_config(
     page_title="SAEIS | Smart Audit & ERP System", page_icon="📊", layout="wide"
 )
 
-# عرض الشعار الاحترافي في الترويسة إذا كان موجوداً، أو عرض بانر متناسق
+# عرض الشعار الاحترافي في الترويسة إذا كان موجوداً
 logo_path = "SAEIS_Complete_Logo_Dark.png"
 if os.path.exists(logo_path):
   col_logo, col_space = st.columns([3, 7])
@@ -18,7 +18,6 @@ if os.path.exists(logo_path):
     st.image(logo_path, use_container_width=True)
   st.markdown("<br>", unsafe_allow_html=True)
 else:
-  # بانر احتياطي في حال لم يتم رفع الصورة بعد
   st.markdown(
       """
         <div style="background: linear-gradient(135deg, #0B132B 0%, #1C2541 100%); padding: 25px; border-radius: 12px; color: white; margin-bottom: 25px; border: 1px solid #3A506B;">
@@ -65,26 +64,21 @@ if uploaded_file is not None:
         st.markdown("---")
         st.subheader("📊 لوحة مؤشرات نتائج التدقيق والمعايير الدولية")
 
-        # حساب عدد الحالات المكتشفة لكل فحص لعرضها في بطاقات إحصائية (6 بطاقات تشمل IAS 16)
+        # عرض بطاقات المؤشرات الإحصائية لـ 6 فحوصات
         c1, c2, c3, c4, c5, c6 = st.columns(6)
         unbalanced_count = len(audit_results.get("unbalanced", []))
         duplicates_count = len(audit_results.get("duplicates", []))
         neg_count = len(audit_results.get("negative_balances", []))
         anomaly_count = len(audit_results.get("anomalies", []))
         ias1_count = len(audit_results.get("ias1_compliance", []))
-        ias16_count = len(audit_results.get("ias16_compliance", []))
+        ias2_count = len(audit_results.get("ias2_inventory", []))
 
-        c1.metric(
-            "قيود غير متوازنة",
-            unbalanced_count,
-            delta="مخالفة" if unbalanced_count > 0 else "سليم",
-            delta_color="inverse",
-        )
+        c1.metric("قيود غير متوازنة", unbalanced_count)
         c2.metric("قيود مكررة", duplicates_count)
         c3.metric("أرصدة سالبة", neg_count)
         c4.metric("قيم شاذة", anomaly_count)
         c5.metric("مخالفات IAS 1", ias1_count)
-        c6.metric("مراجعات IAS 16", ias16_count)
+        c6.metric("مخالفات IAS 2", ias2_count)
 
         st.markdown("---")
         st.subheader("🔍 تفاصيل نتائج التدقيق والامتثال المعياري")
@@ -101,10 +95,12 @@ if uploaded_file is not None:
             ),
             (
                 "ias16_compliance",
-                (
-                    "مراجعة الأصول الثابتة والإهلاك (IAS 16 - رصد الحركات"
-                    " الرأسمالية الكبرى)"
-                ),
+                "رصد الحركات الرأسمالية الكبرى (IAS 16 - الأصول الثابتة)",
+            ),
+            (
+                "ias2_inventory",
+                "مخالفات معيار المخزون وتقييمه (IAS 2 - أرصدة المخزون"
+                " السالبة)",
             ),
         ]:
           res_data = audit_results.get(key)
@@ -115,7 +111,7 @@ if uploaded_file is not None:
             st.success(f"✅ لا توجد ملاحظات في: {title}")
 
         st.markdown("---")
-        # زر تصدير التقرير بتنسيق احترافي
+        # تصدير التقرير المعتمد بصيغة Excel
         report_file = report_exporter.generate_audit_report(df)
         with open(report_file, "rb") as f:
           st.download_button(
