@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import os
 import audit_rules
 import pandas as pd
 import report_exporter
@@ -9,16 +10,24 @@ st.set_page_config(
     page_title="SAEIS | Smart Audit & ERP System", page_icon="📊", layout="wide"
 )
 
-# ترويسة احترافية مع تصميم بصري (Header Banner)
-st.markdown(
-    """
-    <div style="background: linear-gradient(135deg, #1E3A8A 0%, #3B82F6 100%); padding: 20px; border-radius: 12px; color: white; margin-bottom: 25px;">
-        <h1 style="margin: 0; font-size: 28px; font-weight: bold;">📊 نظام التدقيق المحاسبي الذكي (SAEIS-Core)</h1>
-        <p style="margin: 5px 0 0 0; font-size: 15px; opacity: 0.9;">منصة أتمتة التدقيق المالي، كشف الشواذ، والتحقق من الامتثال لمعايير التقارير المالية الدولية (IAS / IFRS)</p>
-    </div>
-""",
-    unsafe_allow_html=True,
-)
+# عرض الشعار الاحترافي في الترويسة إذا كان موجوداً، أو عرض بانر متناسق
+logo_path = "SAEIS_Complete_Logo_Dark.png"
+if os.path.exists(logo_path):
+  col_logo, col_space = st.columns([3, 7])
+  with col_logo:
+    st.image(logo_path, use_container_width=True)
+  st.markdown("<br>", unsafe_allow_html=True)
+else:
+  # بانر احتياطي في حال لم يتم رفع الصورة بعد
+  st.markdown(
+      """
+        <div style="background: linear-gradient(135deg, #0B132B 0%, #1C2541 100%); padding: 25px; border-radius: 12px; color: white; margin-bottom: 25px; border: 1px solid #3A506B;">
+            <h1 style="margin: 0; font-size: 26px; font-weight: bold; color: #4ECCA3;">🛡️ SAEIS-Core</h1>
+            <p style="margin: 5px 0 0 0; font-size: 14px; opacity: 0.85;">Financial Reconciliation & Audit Intelligence Platform</p>
+        </div>
+    """,
+      unsafe_allow_html=True,
+  )
 
 # القائمة الجانبية المنسقة
 st.sidebar.markdown(
