@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import os
+import ai_advisor
 import audit_rules
 import pandas as pd
 import report_exporter
@@ -55,9 +56,9 @@ if uploaded_file is not None:
     with st.expander("📋 معاينة البيانات المحاسبية الأساسية", expanded=False):
       st.dataframe(df.head(10), use_container_width=True)
 
-    if st.button("🚀 تشغيل محرك التدقيق والامتثال الشامل", use_container_width=True):
+    if st.button("🚀 تشغيل محرك التدقيق والتوصيات الذكية", use_container_width=True):
       with st.spinner(
-          "جاري تحليل الحسابات واكتشاف الشواذ ومقارنتها بمعايير IAS/IFRS..."
+          "جاري تحليل الحسابات وتوليد التوصيات المحاسبية الذكية..."
       ):
         audit_results = audit_rules.run_audit_checks(df)
 
@@ -81,9 +82,11 @@ if uploaded_file is not None:
         c6.metric("مخالفات IAS 2", ias2_count)
 
         st.markdown("---")
-        st.subheader("🔍 تفاصيل نتائج التدقيق والامتثال المعياري")
+        st.subheader(
+            "🔍 تفاصيل نتائج التدقيق والتوصيات الذكية (AI Recommendations)"
+        )
 
-        for key, title in [
+        checks_meta = [
             ("unbalanced", "القيود غير المتوازنة (مدين ≠ دائن)"),
             ("duplicates", "القيود المحاسبية المكررة"),
             ("negative_balances", "الأرصدة السالبة في حسابات الأصول"),
@@ -102,11 +105,17 @@ if uploaded_file is not None:
                 "مخالفات معيار المخزون وتقييمه (IAS 2 - أرصدة المخزون"
                 " السالبة)",
             ),
-        ]:
+        ]
+
+        for key, title in checks_meta:
           res_data = audit_results.get(key)
           if isinstance(res_data, pd.DataFrame) and not res_data.empty:
             st.warning(f"⚠️ تم رصد حالات تستدعي المراجعة في: {title}")
-            st.dataframe(res_data, use_container_width=True)
+            # إضافة التوصيات الذكية لجدول النتائج
+            enhanced_res = ai_advisor.enhance_df_with_recommendations(
+                res_data, key
+            )
+            st.dataframe(enhanced_res, use_container_width=True)
           else:
             st.success(f"✅ لا توجد ملاحظات في: {title}")
 
