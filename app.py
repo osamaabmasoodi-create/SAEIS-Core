@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import audit_rules
 import pandas as pd
 import report_exporter
@@ -41,6 +42,11 @@ if uploaded_file is not None:
             ("duplicates", "القيود المكررة"),
             ("negative_balances", "الأرصدة السالبة في الأصول"),
             ("anomalies", "القيم الشاذة (Anomalies)"),
+            (
+                "ias1_compliance",
+                "مخالفات معيار العرض والافصاح المالي (IAS 1 - تبويب"
+                " الأصول/النقدية)",
+            ),
         ]:
           res_data = audit_results.get(key)
           if isinstance(res_data, pd.DataFrame) and not res_data.empty:
