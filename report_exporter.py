@@ -11,7 +11,7 @@ def generate_audit_report(df, output_file='SAEIS_Audit_Report.xlsx'):
 
     unbalanced = check_unbalanced_entries(df)
     duplicates = find_duplicate_entries(df)
-    negative_balances = check_negative_balances(df)
+   duplicates = check_duplicate_entries(df)
     anomalies = detect_anomalies_zscore(df)
 
     # إنشاء ملخص عام للتقرير
