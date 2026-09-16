@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import pandas as pd
 
 
@@ -37,7 +38,7 @@ def detect_anomalies_zscore(df):
 
 
 def check_ias1_compliance(df):
-  """فحص الامتثال لمعيار IAS 1: تبويب الأصول والنقدية (عدم وجود أرصدة سالبة في الأصول الرئيسية)"""
+  """معيار IAS 1: العرض والافصاح المالي"""
   if not df.empty and "Account_ID" in df.columns and "Balance" in df.columns:
     asset_violations = df[
         df["Account_ID"].astype(str).str.startswith("1")
@@ -48,14 +49,8 @@ def check_ias1_compliance(df):
 
 
 def check_ias16_fixed_assets(df):
-  """فحص امتثال معيار IAS 16 (الأصول الثابتة): التحقق من القيود المتعلقة بالأصول
-
-  (مثل رصد المصروفات الرأسمالية الكبيرة غير المتبوبة أو الحركات العكسية غير
-  المنطقية في مجمّع الإهلاك)
-  """
+  """معيار IAS 16: الأصول الثابتة"""
   if not df.empty and "Account_ID" in df.columns and "Amount" in df.columns:
-    # افتراض أن الحسابات التي تبدأ بـ (12 أو 13) تمثل الأصول الثابتة أو مجمع الإهلاك
-    # وفحص المبالغ الكبيرة جداً التي قد تتطلب إفصاحاً أو تدقيقاً خاصاً للإهلاك
     fixed_asset_checks = df[
         df["Account_ID"].astype(str).str.startswith(("12", "13"))
         & (df["Amount"] > 50000)
@@ -64,15 +59,25 @@ def check_ias16_fixed_assets(df):
   return pd.DataFrame(columns=df.columns if not df.empty else [])
 
 
+def audit_ias_2_inventory(df):
+  """معيار IAS 2: المخزون والأرصدة السالبة"""
+  if not df.empty and "Account_ID" in df.columns and "Balance" in df.columns:
+    inventory_violations = df[
+        df["Account_ID"].astype(str).str.startswith("2") & (df["Balance"] < 0)
+    ]
+    return inventory_violations.copy()
+  return pd.DataFrame(columns=df.columns if not df.empty else [])
+
+
 def run_audit_checks(df):
+  """محرك التشغيل الشامل لجميع قواعد التدقيق والامتثال"""
   results = {
       "unbalanced": check_unbalanced_entries(df),
       "duplicates": check_duplicate_entries(df),
       "negative_balances": check_negative_balances(df),
       "anomalies": detect_anomalies_zscore(df),
       "ias1_compliance": check_ias1_compliance(df),
-      "ias16_compliance": check_ias16_fixed_assets(
-          df
-      ),  # إضافة معيار IAS 16 الجديد
+      "ias16_compliance": check_ias16_fixed_assets(df),
+      "ias2_inventory": audit_ias_2_inventory(df),
   }
   return results
