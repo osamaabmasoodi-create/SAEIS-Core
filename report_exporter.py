@@ -1,6 +1,6 @@
 import pandas as pd
 from audit_rules import (
-    check_entry_balance,
+   check_unbalanced_entries,
     find_duplicate_entries,
     check_negative_balances,
     detect_anomalies_zscore
@@ -10,7 +10,7 @@ def generate_audit_report(df, output_file='SAEIS_Audit_Report.xlsx'):
     """
     توليد تقرير تدقيق محاسبي شامل وتصديره إلى ملف Excel بأوراق عمل منفصلة
     """
-    balanced, diff = check_entry_balance(df)
+   results = check_unbalanced_entries(df)
     duplicates = find_duplicate_entries(df)
     negative_balances = check_negative_balances(df).reset_index()
     anomalies = detect_anomalies_zscore(df)
