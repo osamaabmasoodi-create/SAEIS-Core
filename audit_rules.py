@@ -1,64 +1,47 @@
-import audit_rules
 import pandas as pd
-import streamlit as st
 
-st.set_page_config(
-    page_title="SAEIS - Smart Audit & ERP System", page_icon="📊", layout="wide"
-)
 
-st.title("📊 نظام التدقيق المحاسبي الذكي - SAEIS")
-st.markdown(
-    "فحص القيود المحاسبية، كشف الشواذ، والتأكد من الامتثال لمعايير التقارير المالية الدولية (IFRS / IAS)"
-)
+def check_unbalanced_entries(df):
+  if (
+      not df.empty
+      and "Entry_ID" in df.columns
+      and "Debit" in df.columns
+      and "Credit" in df.columns
+  ):
+    grouped = df.groupby("Entry_ID")[["Debit", "Credit"]].sum()
+    unbalanced = grouped[grouped["Debit"] != grouped["Credit"]]
+    if not unbalanced.empty:
+      return df[df["Entry_ID"].isin(unbalanced.index)]
+  return pd.DataFrame(columns=df.columns if not df.empty else [])
 
-# Sidebar for file upload
-st.sidebar.header("إعدادات المدخلات")
-uploaded_file = st.sidebar.file_uploader(
-    "قم برفع ملف البيانات المحاسبية (Excel أو CSV)", type=["xlsx", "csv"]
-)
 
-if uploaded_file is not None:
-  try:
-    if uploaded_file.name.endswith(".csv"):
-      df = pd.read_csv(uploaded_file)
-    else:
-      df = pd.read_excel(uploaded_file)
+def check_duplicate_entries(df):
+  if not df.empty:
+    return df[df.duplicated(keep=False)]
+  return pd.DataFrame(columns=df.columns if not df.empty else [])
 
-    st.success("تم تحميل البيانات بنجاح")
-    st.subheader("📋 معاينة البيانات المرفوعة")
-    st.dataframe(df.head())
 
-    if st.button("تشغيل التدقيق الفوري"):
-      with st.spinner("جاري تنفيذ خوارزميات التدقيق واكتشاف الشوائب..."):
-        try:
-          audit_results = audit_rules.run_audit_checks(df)
-        except Exception as e:
-          # Fallback if run_audit_checks format varies
-          audit_results = {
-              "unbalanced": audit_rules.check_unbalanced_entries(df),
-              "duplicates": audit_rules.check_duplicate_entries(df),
-              "negative_balances": audit_rules.check_negative_balances(df),
-              "anomalies": audit_rules.detect_anomalies_zscore(df),
-          }
+def check_negative_balances(df):
+  if not df.empty and "Balance" in df.columns:
+    return df[df["Balance"] < 0]
+  return pd.DataFrame(columns=df.columns if not df.empty else [])
 
-        st.markdown("---")
-        st.subheader(" نتائج التدقيق المحاسبي")
 
-        # Display results safely
-        for key, title in [
-            ("unbalanced", "القيود غير المتوازنة (مدين ≠ دائن)"),
-            ("duplicates", "القيود المكررة"),
-            ("negative_balances", "الأرصدة السالبة في الأصول"),
-            ("anomalies", "القيم الشاذة (Anomalies)"),
-        ]:
-          res_data = audit_results.get(key)
-          if isinstance(res_data, pd.DataFrame) and not res_data.empty:
-            st.warning(f"⚠️ تم رصد حالات في: {title}")
-            st.dataframe(res_data)
-          else:
-            st.success(f"✅ لا توجد مشاكل في: {title}")
+def detect_anomalies_zscore(df):
+  if not df.empty and "Amount" in df.columns and len(df) > 1:
+    mean = df["Amount"].mean()
+    std = df["Amount"].std()
+    if std > 0:
+      return df[abs(df["Amount"] - mean) > (3 * std)]
+  return pd.DataFrame(columns=df.columns if not df.empty else [])
 
-  except Exception as e:
-    st.error(f"حدث خطأ أثناء قراءة الملف: {e}")
-else:
-  st.info("الرجاء رفع ملف المحاسبة من القائمة الجانبية للبدء.")
+
+def run_audit_checks(df):
+  """الدالة الشاملة التي يستدعيها app.py"""
+  results = {
+      "unbalanced": check_unbalanced_entries(df),
+      "duplicates": check_duplicate_entries(df),
+      "negative_balances": check_negative_balances(df),
+      "anomalies": detect_anomalies_zscore(df),
+  }
+  return results
