@@ -1,19 +1,5 @@
 import pandas as pd
 from audit_rules import run_audit_checks
-
-# بيانات محاسبية تجريبية تحتوي على أخطاء وشواذ متعددة
-data = {
-    'entry_id': [1, 2, 3, 4, 5, 6],
-    'date': ['2026-09-01', '2026-09-01', '2026-09-02', '2026-09-02', '2026-09-03', '2026-09-03'],
-    'account_id': ['1010', '2010', '1010', '1010', '1010', '5010'], # حساب 1010 (النقدية)
-    'debit': [1500.0, 0.0, 500.0, 500.0, 0.0, 85000.0],           # قيد رقم 6 مبلغ شاذ جداً (Anomaly)
-    'credit': [0.0, 1500.0, 0.0, 0.0, 3000.0, 0.0]               # قيد رقم 5 يجعل النقدية سالبة
-}
-
-df = pd.DataFrame(data)
-
-import pandas as pd
-from audit_rules import run_audit_checks
 from report_exporter import generate_audit_report
 
 # بيانات محاسبية تجريبية تحتوي على أخطاء وشواذ متعددة
