@@ -40,7 +40,7 @@ uploaded_file = st.sidebar.file_uploader(
 st.sidebar.markdown("---")
 st.sidebar.markdown(
     "<p style='font-size: 12px; color: #6B7280; text-align:"
-    " center;'><b>SAEIS-Core v1.1</b><br>تطوير: أسامة عباس عبده<br>© 2026</p>",
+    " center;'><b>SAEIS-Core v1.2</b><br>تطوير: أسامة عباس عبده<br>© 2026</p>",
     unsafe_allow_html=True,
 )
 
@@ -63,15 +63,16 @@ if uploaded_file is not None:
         audit_results = audit_rules.run_audit_checks(df)
 
         st.markdown("---")
-        st.subheader("📊 لوحة مؤشرات نتائج التدقيق")
+        st.subheader("📊 لوحة مؤشرات نتائج التدقيق والمعايير الدولية")
 
-        # حساب عدد الحالات المكتشفة لكل فحص لعرضها في بطاقات إحصائية
-        c1, c2, c3, c4, c5 = st.columns(5)
+        # حساب عدد الحالات المكتشفة لكل فحص لعرضها في بطاقات إحصائية (6 بطاقات تشمل IAS 16)
+        c1, c2, c3, c4, c5, c6 = st.columns(6)
         unbalanced_count = len(audit_results.get("unbalanced", []))
         duplicates_count = len(audit_results.get("duplicates", []))
         neg_count = len(audit_results.get("negative_balances", []))
         anomaly_count = len(audit_results.get("anomalies", []))
         ias1_count = len(audit_results.get("ias1_compliance", []))
+        ias16_count = len(audit_results.get("ias16_compliance", []))
 
         c1.metric(
             "قيود غير متوازنة",
@@ -83,6 +84,7 @@ if uploaded_file is not None:
         c3.metric("أرصدة سالبة", neg_count)
         c4.metric("قيم شاذة", anomaly_count)
         c5.metric("مخالفات IAS 1", ias1_count)
+        c6.metric("مراجعات IAS 16", ias16_count)
 
         st.markdown("---")
         st.subheader("🔍 تفاصيل نتائج التدقيق والامتثال المعياري")
@@ -96,6 +98,13 @@ if uploaded_file is not None:
                 "ias1_compliance",
                 "مخالفات معيار العرض والإفصاح المالي (IAS 1 - تبويب"
                 " الأصول/النقدية)",
+            ),
+            (
+                "ias16_compliance",
+                (
+                    "مراجعة الأصول الثابتة والإهلاك (IAS 16 - رصد الحركات"
+                    " الرأسمالية الكبرى)"
+                ),
             ),
         ]:
           res_data = audit_results.get(key)
