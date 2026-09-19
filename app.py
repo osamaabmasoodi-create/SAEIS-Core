@@ -39,7 +39,7 @@ if "authenticated" not in st.session_state:
 if "user_info" not in st.session_state:
     st.session_state.user_info = None
 
-# Sample Audit Data
+# Default Audit Data
 if "audit_data" not in st.session_state:
     st.session_state.audit_data = pd.DataFrame([
         {"Entry_ID": 101, "Account": "Buildings & Equipment", "Description": "Optics Testing Device", "Amount": 15000.0, "Standard": "IAS 16", "Status": "Violation", "Auditor_Notes": "Reclassify to Expense"},
@@ -95,7 +95,7 @@ if not st.session_state.authenticated:
 # 4. Main Application Dashboard
 # ---------------------------------------------------------
 with st.sidebar:
-    st.title("👤 Developer / User Profile")
+    st.title("👤 Developer Profile")
     st.write(f"**Lead Developer:** {st.session_state.user_info['name']}")
     st.write(f"**Role:** {st.session_state.user_info['role']}")
     st.write("**System:** SAEIS Platform v1.3")
@@ -104,15 +104,14 @@ with st.sidebar:
         logout()
 
 st.title("📊 SAEIS - Audit Live Dashboard & CRUD Engine")
-st.info("💡 Edit entries, update IFRS compliance statuses, upload ledgers, or export reports below.")
+st.info("💡 Dynamic Trial Balance Checking & Compliance Verification Engine")
 
 tabs = st.tabs(["📑 Live Audit Editor", "➕ Add New Entry", "💾 Export Audit Report"])
 
-# Tab 1: Live Audit Editor & File Uploader
+# Tab 1: Live Audit Editor & Dynamic Balance Audit Engine
 with tabs[0]:
     st.subheader("Interactive Audit Journal Table")
     
-    # --- File Uploader Feature ---
     uploaded_file = st.file_uploader("📤 Upload Accounting Ledger (CSV or Excel)", type=["csv", "xlsx"])
 
     if uploaded_file is not None:
@@ -122,11 +121,50 @@ with tabs[0]:
             else:
                 df_uploaded = pd.read_excel(uploaded_file)
             
-            st.session_state.audit_data = df_uploaded
-            st.success("File uploaded and integrated successfully into the audit engine!")
-        except Exception as e:
-            st.error(f"Error loading file: {e}")
+            # تنظيف البيانات
+            df_uploaded = df_uploaded.dropna(how='all')
             
+            # البحث الذكي عن أعمدة المدين والدائن
+            debit_col = None
+            credit_col = None
+
+            for col in df_uploaded.columns:
+                col_str = str(col).strip()
+                if any(k in col_str for k in ['مدين', 'Debit', 'debit', 'H']):
+                    debit_col = col
+                elif any(k in col_str for k in ['دائن', 'Credit', 'credit', 'I']):
+                    credit_col = col
+
+            if debit_col is not None and credit_col is not None:
+                total_debit = pd.to_numeric(df_uploaded[debit_col], errors='coerce').fillna(0).sum()
+                total_credit = pd.to_numeric(df_uploaded[credit_col], errors='coerce').fillna(0).sum()
+                balance_diff = total_debit - total_credit
+
+                st.session_state.audit_summary = {
+                    "total_debit": total_debit,
+                    "total_credit": total_credit,
+                    "difference": balance_diff
+                }
+
+            st.session_state.audit_data = df_uploaded
+            st.success("File uploaded and analyzed successfully!")
+        except Exception as e:
+            st.error(f"Error processing ledger: {e}")
+
+    # عرض مؤشرات التوازن
+    if "audit_summary" in st.session_state:
+        summary = st.session_state.audit_summary
+        col1, col2, col3 = st.columns(3)
+        col1.metric("إجمالي الحركات المدينة", f"{summary['total_debit']:,.2f} YER")
+        col2.metric("إجمالي الحركات الدائنة", f"{summary['total_credit']:,.2f} YER")
+        
+        diff = summary['difference']
+        if abs(diff) > 0.01:
+            col3.metric("⚠️ فرق التوازن (غير متوازن)", f"{diff:,.2f} YER", delta_color="inverse")
+            st.error(f"🚨 تنبيه تدقيق SAEIS: هناك عدم توازن في كشف الحساب بمبلغ قدره {abs(diff):,.2f} YER!")
+        else:
+            col3.metric("✅ فرق التوازن", "0.00 YER")
+
     st.write("Modify cells directly in the table below and click save:")
     
     edited_df = st.data_editor(
@@ -146,7 +184,7 @@ with tabs[1]:
     with st.form("add_entry_form"):
         col_a, col_b = st.columns(2)
         with col_a:
-            entry_id = st.number_input("Entry ID", min_value=100, step=1, value=int(st.session_state.audit_data["Entry_ID"].max() + 1 if "Entry_ID" in st.session_state.audit_data.columns else 101))
+            entry_id = st.number_input("Entry ID", min_value=100, step=1, value=104)
             account_name = st.text_input("Account Name", value="Sales Revenue")
             amount = st.number_input("Amount", min_value=0.0, value=5000.0, step=100.0)
         with col_b:
@@ -174,7 +212,7 @@ with tabs[2]:
     st.subheader("Export Final Audit Report")
     st.dataframe(st.session_state.audit_data, use_container_width=True)
     
-    csv_data = st.session_state.audit_data.to_csv(index=False).encode('utf-8')
+    csv_data = st.session_state.audit_data.to_csv(index=False).encode('utf-8-sig')
     st.download_button(
         label="📥 Download Audit Report (CSV)",
         data=csv_data,
