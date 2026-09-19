@@ -72,7 +72,6 @@ uploaded_file = st.file_uploader("📤 قم برفع دفتر اليومية أ�
 
 if uploaded_file is not None:
     try:
-        # قراءة الأوراق وتجميع البيانات
         if uploaded_file.name.endswith(('.xlsx', '.xls')):
             excel_file = pd.ExcelFile(uploaded_file)
             sheet_dfs = []
@@ -85,7 +84,6 @@ if uploaded_file is not None:
             raw_df = pd.read_csv(uploaded_file, header=None)
 
         if not raw_df.empty:
-            # البحث عن صف العناوين (Header Row)
             header_idx = 0
             for idx, row in raw_df.iterrows():
                 row_str = row.astype(str).str.cat(sep=' ')
@@ -93,12 +91,10 @@ if uploaded_file is not None:
                     header_idx = idx
                     break
 
-            # ضبط الهيدر وتنظيف الجدول
             df_cleaned = raw_df.iloc[header_idx + 1:].copy()
             df_cleaned.columns = raw_df.iloc[header_idx].astype(str).str.strip()
             df_cleaned = df_cleaned.dropna(how='all')
 
-            # كشف أعمدة المبالغ (المدين والدائن) تلقائياً
             debit_col, credit_col = None, None
             for col in df_cleaned.columns:
                 c_name = str(col).lower()
@@ -107,7 +103,6 @@ if uploaded_file is not None:
                 elif 'دائن' in c_name or 'credit' in c_name:
                     credit_col = col
 
-            # في حال عدم مطابقة المسميات الصريحة، يتم استخراج أكثر عمودين رقميين
             if debit_col is None or credit_col is None:
                 numeric_cols = []
                 for col in df_cleaned.columns:
@@ -119,18 +114,20 @@ if uploaded_file is not None:
                     debit_col = numeric_cols[0][0]
                     credit_col = numeric_cols[1][0]
 
-            # حساب المجاميع والفروقات
+            total_debit = 0.0
+            total_credit = 0.0
             if debit_col and credit_col:
-                total_debit = pd.to_numeric(df_cleaned[debit_col], errors='coerce').fillna(0).sum()
-                total_credit = pd.to_numeric(df_cleaned[credit_col], errors='coerce').fillna(0).sum()
-                diff = total_debit - total_credit
+                total_debit = float(pd.to_numeric(df_cleaned[debit_col], errors='coerce').fillna(0).sum())
+                total_credit = float(pd.to_numeric(df_cleaned[credit_col], errors='coerce').fillna(0).sum())
 
-                st.session_state.audit_summary = {
-                    "total_debit": total_debit,
-                    "total_credit": total_credit,
-                    "difference": diff,
-                    "count": len(df_cleaned)
-                }
+            diff = total_debit - total_credit
+
+            st.session_state.audit_summary = {
+                "total_debit": total_debit,
+                "total_credit": total_credit,
+                "difference": diff,
+                "count": len(df_cleaned)
+            }
 
             st.session_state.audit_data = df_cleaned
             st.success("✅ تم الفحص والربط مع محرك التدقيق بنجاح!")
@@ -138,18 +135,22 @@ if uploaded_file is not None:
         st.error(f"حدث خطأ أثناء قراءة الملف: {e}")
 
 # ---------------------------------------------------------
-# 5. عرض لوحة مؤشرات التدقيق (Metrics Engine)
+# 5. عرض لوحة مؤشرات التدقيق (مؤمنة بالكامل بـ get)
 # ---------------------------------------------------------
 if "audit_summary" in st.session_state:
     summary = st.session_state.audit_summary
     st.subheader("📈 نتائج الفحص والتوازن العام")
     
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric("إجمالي السطور المسجلة", f"{summary['count']} سطر")
-    col2.metric("إجمالي الحركات المدينة (Debit)", f"{summary['total_debit']:,.2f} YER")
-    col3.metric("إجمالي الحركات الدائنة (Credit)", f"{summary['total_credit']:,.2f} YER")
+    rec_count = summary.get('count', 0)
+    t_debit = summary.get('total_debit', 0.0)
+    t_credit = summary.get('total_credit', 0.0)
+    diff = summary.get('difference', 0.0)
+
+    col1.metric("إجمالي السطور المسجلة", f"{rec_count} سطر")
+    col2.metric("إجمالي الحركات المدينة (Debit)", f"{t_debit:,.2f} YER")
+    col3.metric("إجمالي الحركات الدائنة (Credit)", f"{t_credit:,.2f} YER")
     
-    diff = summary['difference']
     if abs(diff) > 0.01:
         col4.metric("⚠️ فرق التوازن (غير متوازن)", f"{diff:,.2f} YER", delta_color="inverse")
         st.error(f"🚨 تنبيه تدقيق SAEIS: القيود غير متوازنة! يوجد فارق قدره {abs(diff):,.2f} YER.")
@@ -157,12 +158,11 @@ if "audit_summary" in st.session_state:
         col4.metric("✅ التوازن المحاسبي", "0.00 YER (متوازن)")
 
 # ---------------------------------------------------------
-# 6. عرض جدول القيود وتطبيق التنسيق بدون أخطاء map/applymap
+# 6. عرض جدول القيود
 # ---------------------------------------------------------
 if "audit_data" in st.session_state:
     st.subheader("📑 كافة القيود المحاسبية المسجلة")
     
-    # دالة التظليل الآمنة لتعلم الأخطاء
     def highlight_errors(val):
         try:
             val_num = float(val)
@@ -172,7 +172,6 @@ if "audit_data" in st.session_state:
             pass
         return ''
 
-    # دعم الإصدارات القديمة والحديثة من Pandas
     df_to_show = st.session_state.audit_data
     try:
         styled_df = df_to_show.style.map(highlight_errors)
