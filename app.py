@@ -3,7 +3,7 @@ import pandas as pd
 import hashlib
 
 # ---------------------------------------------------------
-# 1. Page Configuration & Setup
+# 1. Page Configuration
 # ---------------------------------------------------------
 st.set_page_config(
     page_title="SAEIS - Smart Audit & ERP Integration System",
@@ -11,7 +11,6 @@ st.set_page_config(
     layout="wide"
 )
 
-# Password Hashing Function (SHA-256)
 def make_hash(password):
     return hashlib.sha256(str.encode(password)).hexdigest()
 
@@ -20,17 +19,11 @@ def check_hash(password, hashed_text):
         return hashed_text
     return False
 
-# Database of Users
 DEFAULT_USERS = {
     "admin": {
         "name": "Osama Abbas",
         "password_hash": make_hash("admin123"),
         "role": "Chief Auditor"
-    },
-    "auditor1": {
-        "name": "Internal Auditor",
-        "password_hash": make_hash("audit123"),
-        "role": "Staff Auditor"
     }
 }
 
@@ -39,12 +32,9 @@ if "authenticated" not in st.session_state:
 if "user_info" not in st.session_state:
     st.session_state.user_info = None
 
-# Default Audit Data
 if "audit_data" not in st.session_state:
     st.session_state.audit_data = pd.DataFrame([
-        {"Entry_ID": 101, "Account": "Buildings & Equipment", "Description": "Optics Testing Device", "Amount": 15000.0, "Standard": "IAS 16", "Status": "Violation", "Auditor_Notes": "Reclassify to Expense"},
-        {"Entry_ID": 102, "Account": "Inventory", "Description": "Frames Revaluation", "Amount": 8200.0, "Standard": "IAS 2", "Status": "Passed", "Auditor_Notes": "Valued at lower of cost or NRV"},
-        {"Entry_ID": 103, "Account": "Receivables", "Description": "ECL Provision", "Amount": 3400.0, "Standard": "IFRS 9", "Status": "Under Review", "Auditor_Notes": "Recalculate credit loss rate"}
+        {"Entry_ID": 101, "Account": "Buildings & Equipment", "Description": "Optics Testing Device", "Amount": 15000.0, "Standard": "IAS 16", "Status": "Violation", "Auditor_Notes": "Reclassify to Expense"}
     ])
 
 # ---------------------------------------------------------
@@ -68,31 +58,20 @@ def logout():
     st.session_state.user_info = None
     st.rerun()
 
-# ---------------------------------------------------------
-# 3. Login Interface
-# ---------------------------------------------------------
 if not st.session_state.authenticated:
     st.title("🔒 SAEIS - System Login")
-    st.subheader("Smart Audit & ERP Integration System")
-    st.write("Enter your credentials to access the live audit dashboard.")
-
     col1, col2 = st.columns([1, 2])
     with col1:
         with st.form("login_form"):
             username = st.text_input("Username", value="admin")
             password = st.text_input("Password", type="password", value="admin123")
             submit_btn = st.form_submit_button("Login 🚀", use_container_width=True)
-
-            if submit_btn:
-                if login(username, password):
-                    st.success("Login Successful!")
-                    st.rerun()
-                else:
-                    st.error("Invalid username or password.")
+            if submit_btn and login(username, password):
+                st.rerun()
     st.stop()
 
 # ---------------------------------------------------------
-# 4. Main Application Dashboard
+# 3. Main Dashboard & Auto Column Auto-Detection Engine
 # ---------------------------------------------------------
 with st.sidebar:
     st.title("👤 Developer Profile")
@@ -103,41 +82,57 @@ with st.sidebar:
     if st.button("🚪 Logout", use_container_width=True):
         logout()
 
-st.title("📊 SAEIS - Audit Live Dashboard & CRUD Engine")
-st.info("💡 Dynamic Trial Balance Checking & Compliance Verification Engine")
+st.title("📊 SAEIS - Smart Audit & ERP Integration Engine")
 
-tabs = st.tabs(["📑 Live Audit Editor", "➕ Add New Entry", "💾 Export Audit Report"])
+tabs = st.tabs(["📑 Dynamic Journal Audit", "➕ Add New Entry", "💾 Export Audit Report"])
 
-# Tab 1: Live Audit Editor & Dynamic Balance Audit Engine
 with tabs[0]:
-    st.subheader("Interactive Audit Journal Table")
+    st.subheader("Interactive Audit Journal & Trial Balance Checker")
     
     uploaded_file = st.file_uploader("📤 Upload Accounting Ledger (CSV or Excel)", type=["csv", "xlsx"])
 
     if uploaded_file is not None:
         try:
-            if uploaded_file.name.endswith('.csv'):
-                df_uploaded = pd.read_csv(uploaded_file)
+            # معالجة أوراق العمل متعددة الصفحات
+            if uploaded_file.name.endswith('.xlsx') or uploaded_file.name.endswith('.xls'):
+                excel_file = pd.ExcelFile(uploaded_file)
+                sheet_names = excel_file.sheet_names
+                
+                selected_sheet = st.selectbox("📄 اختر ورقة العمل:", sheet_names, index=len(sheet_names)-1 if len(sheet_names)>1 else 0)
+                df_uploaded = pd.read_excel(excel_file, sheet_name=selected_sheet)
             else:
-                df_uploaded = pd.read_excel(uploaded_file)
-            
-            # تنظيف البيانات
-            df_uploaded = df_uploaded.dropna(how='all')
-            
-            # البحث الذكي عن أعمدة المدين والدائن
-            debit_col = None
-            credit_col = None
+                df_uploaded = pd.read_csv(uploaded_file)
 
+            st.session_state.audit_data = df_uploaded
+
+            # البحث التلقائي العميق عن أعمدة المبالغ والمدين والدائن
+            debit_series = None
+            credit_series = None
+
+            # 1. محاولة التعرف بالكلمات المفتاحية
             for col in df_uploaded.columns:
                 col_str = str(col).strip()
-                if any(k in col_str for k in ['مدين', 'Debit', 'debit', 'H']):
-                    debit_col = col
-                elif any(k in col_str for k in ['دائن', 'Credit', 'credit', 'I']):
-                    credit_col = col
+                if any(k in col_str for k in ['مدين', 'Debit', 'debit']):
+                    debit_series = pd.to_numeric(df_uploaded[col], errors='coerce').fillna(0)
+                elif any(k in col_str for k in ['دائن', 'Credit', 'credit']):
+                    credit_series = pd.to_numeric(df_uploaded[col], errors='coerce').fillna(0)
 
-            if debit_col is not None and credit_col is not None:
-                total_debit = pd.to_numeric(df_uploaded[debit_col], errors='coerce').fillna(0).sum()
-                total_credit = pd.to_numeric(df_uploaded[credit_col], errors='coerce').fillna(0).sum()
+            # 2. إذا لم يجد بالكلمات المفتاحية، افحص الأعمدة الرقمية (الأعمدة Unnamed التي فيها أرقام المبالغ)
+            if debit_series is None or credit_series is None:
+                numeric_cols = []
+                for col in df_uploaded.columns:
+                    s = pd.to_numeric(df_uploaded[col], errors='coerce').fillna(0)
+                    if s.sum() > 0:
+                        numeric_cols.append(s)
+                
+                # أخذ أول عمودين رقميين كـ مدين ودائن
+                if len(numeric_cols) >= 2:
+                    debit_series = numeric_cols[0]
+                    credit_series = numeric_cols[1]
+
+            if debit_series is not None and credit_series is not None:
+                total_debit = debit_series.sum()
+                total_credit = credit_series.sum()
                 balance_diff = total_debit - total_credit
 
                 st.session_state.audit_summary = {
@@ -146,26 +141,25 @@ with tabs[0]:
                     "difference": balance_diff
                 }
 
-            st.session_state.audit_data = df_uploaded
-            st.success("File uploaded and analyzed successfully!")
+            st.success("تم تحليل ورقة العمل بنجاح!")
         except Exception as e:
-            st.error(f"Error processing ledger: {e}")
+            st.error(f"حدث خطأ أثناء تحليل الملف: {e}")
 
-    # عرض مؤشرات التوازن
+    # عرض كروت المؤشرات
     if "audit_summary" in st.session_state:
         summary = st.session_state.audit_summary
         col1, col2, col3 = st.columns(3)
-        col1.metric("إجمالي الحركات المدينة", f"{summary['total_debit']:,.2f} YER")
-        col2.metric("إجمالي الحركات الدائنة", f"{summary['total_credit']:,.2f} YER")
+        col1.metric("إجمالي الحركات المدينة (Debit)", f"{summary['total_debit']:,.2f} YER")
+        col2.metric("إجمالي الحركات الدائنة (Credit)", f"{summary['total_credit']:,.2f} YER")
         
         diff = summary['difference']
         if abs(diff) > 0.01:
             col3.metric("⚠️ فرق التوازن (غير متوازن)", f"{diff:,.2f} YER", delta_color="inverse")
-            st.error(f"🚨 تنبيه تدقيق SAEIS: هناك عدم توازن في كشف الحساب بمبلغ قدره {abs(diff):,.2f} YER!")
+            st.error(f"🚨 تنبيه تدقيق SAEIS: كشف الحساب غير متوازن بفرق قدره {abs(diff):,.2f} YER!")
         else:
-            col3.metric("✅ فرق التوازن", "0.00 YER")
+            col3.metric("✅ فرق التوازن", "0.00 YER (متوازن)")
 
-    st.write("Modify cells directly in the table below and click save:")
+    st.write("يمكنك تعديل البيانات مباشرة في الجدول أدناه:")
     
     edited_df = st.data_editor(
         st.session_state.audit_data,
@@ -176,49 +170,13 @@ with tabs[0]:
     
     if st.button("💾 Save System Changes", type="primary"):
         st.session_state.audit_data = edited_df
-        st.success("Audit records updated successfully!")
+        st.success("تم حفظ التعديلات في النظام!")
 
-# Tab 2: Add New Entry
 with tabs[1]:
     st.subheader("Add Journal Entry to Audit Engine")
-    with st.form("add_entry_form"):
-        col_a, col_b = st.columns(2)
-        with col_a:
-            entry_id = st.number_input("Entry ID", min_value=100, step=1, value=104)
-            account_name = st.text_input("Account Name", value="Sales Revenue")
-            amount = st.number_input("Amount", min_value=0.0, value=5000.0, step=100.0)
-        with col_b:
-            standard = st.selectbox("Standard", ["IAS 1", "IAS 2", "IAS 16", "IFRS 9", "IFRS 15"])
-            status = st.selectbox("Audit Status", ["Passed", "Violation", "Under Review"])
-            description = st.text_area("Auditor Notes", value="Revenue recognition review completed")
 
-        save_entry = st.form_submit_button("➕ Add Entry")
-        if save_entry:
-            new_row = {
-                "Entry_ID": entry_id,
-                "Account": account_name,
-                "Description": "Manual Entry",
-                "Amount": amount,
-                "Standard": standard,
-                "Status": status,
-                "Auditor_Notes": description
-            }
-            st.session_state.audit_data = pd.concat([st.session_state.audit_data, pd.DataFrame([new_row])], ignore_index=True)
-            st.success("New Entry Added Successfully!")
-            st.rerun()
-
-# Tab 3: Export Audit Report
 with tabs[2]:
     st.subheader("Export Final Audit Report")
     st.dataframe(st.session_state.audit_data, use_container_width=True)
-    
-    csv_data = st.session_state.audit_data.to_csv(index=False).encode('utf-8-sig')
-    st.download_button(
-        label="📥 Download Audit Report (CSV)",
-        data=csv_data,
-        file_name="SAEIS_Audit_Report_v1.3.csv",
-        mime="text/csv",
-        use_container_width=True
-    )
 
 st.caption("SAEIS © 2026 | Designed & Developed by Osama Abbas")
