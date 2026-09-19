@@ -3,7 +3,7 @@ import pandas as pd
 import hashlib
 
 # ---------------------------------------------------------
-# 1. Page Configuration
+# 1. تهيئة الصفحة والإعدادات الرئيسية
 # ---------------------------------------------------------
 st.set_page_config(
     page_title="SAEIS - Smart Audit & ERP Integration System",
@@ -15,9 +15,7 @@ def make_hash(password):
     return hashlib.sha256(str.encode(password)).hexdigest()
 
 def check_hash(password, hashed_text):
-    if make_hash(password) == hashed_text:
-        return hashed_text
-    return False
+    return make_hash(password) == hashed_text
 
 DEFAULT_USERS = {
     "admin": {
@@ -32,32 +30,9 @@ if "authenticated" not in st.session_state:
 if "user_info" not in st.session_state:
     st.session_state.user_info = None
 
-if "audit_data" not in st.session_state:
-    st.session_state.audit_data = pd.DataFrame([
-        {"Entry_ID": 101, "Account": "Buildings & Equipment", "Description": "Optics Testing Device", "Amount": 15000.0, "Standard": "IAS 16", "Status": "Violation", "Auditor_Notes": "Reclassify to Expense"}
-    ])
-
 # ---------------------------------------------------------
-# 2. Authentication Logic
+# 2. نظام تسجيل الدخول
 # ---------------------------------------------------------
-def login(username, password):
-    if username in DEFAULT_USERS:
-        stored_hash = DEFAULT_USERS[username]["password_hash"]
-        if check_hash(password, stored_hash):
-            st.session_state.authenticated = True
-            st.session_state.user_info = {
-                "username": username,
-                "name": DEFAULT_USERS[username]["name"],
-                "role": DEFAULT_USERS[username]["role"]
-            }
-            return True
-    return False
-
-def logout():
-    st.session_state.authenticated = False
-    st.session_state.user_info = None
-    st.rerun()
-
 if not st.session_state.authenticated:
     st.title("🔒 SAEIS - System Login")
     col1, col2 = st.columns([1, 2])
@@ -66,12 +41,17 @@ if not st.session_state.authenticated:
             username = st.text_input("Username", value="admin")
             password = st.text_input("Password", type="password", value="admin123")
             submit_btn = st.form_submit_button("Login 🚀", use_container_width=True)
-            if submit_btn and login(username, password):
-                st.rerun()
+            if submit_btn:
+                if username in DEFAULT_USERS and check_hash(password, DEFAULT_USERS[username]["password_hash"]):
+                    st.session_state.authenticated = True
+                    st.session_state.user_info = DEFAULT_USERS[username]
+                    st.rerun()
+                else:
+                    st.error("Invalid credentials")
     st.stop()
 
 # ---------------------------------------------------------
-# 3. Main Dashboard & Auto Column Auto-Detection Engine
+# 3. الواجهة الرئيسية ومحرك المعالجة الشامل (Universal Engine)
 # ---------------------------------------------------------
 with st.sidebar:
     st.title("👤 Developer Profile")
@@ -80,7 +60,8 @@ with st.sidebar:
     st.write("**System:** SAEIS Platform v1.3")
     st.divider()
     if st.button("🚪 Logout", use_container_width=True):
-        logout()
+        st.session_state.authenticated = False
+        st.rerun()
 
 st.title("📊 SAEIS - Smart Audit & ERP Integration Engine")
 
@@ -93,44 +74,37 @@ with tabs[0]:
 
     if uploaded_file is not None:
         try:
-            # معالجة أوراق العمل متعددة الصفحات
-            if uploaded_file.name.endswith('.xlsx') or uploaded_file.name.endswith('.xls'):
+            raw_dfs = []
+            
+            # 1. قراءة الملف واستخراج كافة أوراق العمل
+            if uploaded_file.name.endswith(('.xlsx', '.xls')):
                 excel_file = pd.ExcelFile(uploaded_file)
-                sheet_names = excel_file.sheet_names
-                
-                selected_sheet = st.selectbox("📄 اختر ورقة العمل:", sheet_names, index=len(sheet_names)-1 if len(sheet_names)>1 else 0)
-                df_uploaded = pd.read_excel(excel_file, sheet_name=selected_sheet)
+                for sheet in excel_file.sheet_names:
+                    # قراءة بدون هيدر محدد لضمان عدم ضياع الأرقام بسبب الترويسات
+                    df_temp = pd.read_excel(excel_file, sheet_name=sheet, header=None)
+                    if not df_temp.empty:
+                        raw_dfs.append(df_temp)
             else:
-                df_uploaded = pd.read_csv(uploaded_file)
+                raw_dfs.append(pd.read_csv(uploaded_file, header=None))
 
-            st.session_state.audit_data = df_uploaded
+            # 2. تجميع البيانات وتحديد أعمدة الأرقام الحسابية (المدين والدائن)
+            combined_df = pd.concat(raw_dfs, ignore_index=True)
+            
+            numeric_columns_data = []
+            for col in combined_df.columns:
+                # تحويل القيم لأرقام وتجاهل النصوص والترويسات
+                series_num = pd.to_numeric(combined_df[col], errors='coerce').fillna(0)
+                # استبعاد الأعمدة التي تمثل أرقام تسلسلية بسيطة (مثل رقم القيد)
+                if series_num.sum() > 0 and series_num.max() > 100:
+                    numeric_columns_data.append((col, series_num))
 
-            # البحث التلقائي العميق عن أعمدة المبالغ والمدين والدائن
-            debit_series = None
-            credit_series = None
+            # 3. حساب ميزان المراجعه والفرق تلقائياً
+            if len(numeric_columns_data) >= 2:
+                # أعلى عمودين من حيث المجموع الرقمي يعتبران المدين والدائن
+                numeric_columns_data.sort(key=lambda x: x[1].sum(), reverse=True)
+                debit_series = numeric_columns_data[0][1]
+                credit_series = numeric_columns_data[1][1]
 
-            # 1. محاولة التعرف بالكلمات المفتاحية
-            for col in df_uploaded.columns:
-                col_str = str(col).strip()
-                if any(k in col_str for k in ['مدين', 'Debit', 'debit']):
-                    debit_series = pd.to_numeric(df_uploaded[col], errors='coerce').fillna(0)
-                elif any(k in col_str for k in ['دائن', 'Credit', 'credit']):
-                    credit_series = pd.to_numeric(df_uploaded[col], errors='coerce').fillna(0)
-
-            # 2. إذا لم يجد بالكلمات المفتاحية، افحص الأعمدة الرقمية (الأعمدة Unnamed التي فيها أرقام المبالغ)
-            if debit_series is None or credit_series is None:
-                numeric_cols = []
-                for col in df_uploaded.columns:
-                    s = pd.to_numeric(df_uploaded[col], errors='coerce').fillna(0)
-                    if s.sum() > 0:
-                        numeric_cols.append(s)
-                
-                # أخذ أول عمودين رقميين كـ مدين ودائن
-                if len(numeric_cols) >= 2:
-                    debit_series = numeric_cols[0]
-                    credit_series = numeric_cols[1]
-
-            if debit_series is not None and credit_series is not None:
                 total_debit = debit_series.sum()
                 total_credit = credit_series.sum()
                 balance_diff = total_debit - total_credit
@@ -141,11 +115,22 @@ with tabs[0]:
                     "difference": balance_diff
                 }
 
-            st.success("تم تحليل ورقة العمل بنجاح!")
-        except Exception as e:
-            st.error(f"حدث خطأ أثناء تحليل الملف: {e}")
+            # إعداد الجدول للعرض الاحترافي (استخدام أول صف يحتوي نصوص كهيدر إن وجد)
+            header_row_idx = 0
+            for idx, row in combined_df.iterrows():
+                if row.astype(str).str.contains('مدين|دائن|Debit|Credit|الحساب', case=False, na=False).any():
+                    header_row_idx = idx
+                    break
 
-    # عرض كروت المؤشرات
+            display_df = combined_df.iloc[header_row_idx+1:].copy()
+            display_df.columns = combined_df.iloc[header_row_idx].astype(str)
+            st.session_state.audit_data = display_df.dropna(how='all')
+
+            st.success("✅ تم تحليل وتجميع كافة القيود بنجاح!")
+        except Exception as e:
+            st.error(f"حدث خطأ أثناء معالجة الملف: {e}")
+
+    # 4. عرض كروت النتائج ومؤشرات الأخطاء
     if "audit_summary" in st.session_state:
         summary = st.session_state.audit_summary
         col1, col2, col3 = st.columns(3)
@@ -155,28 +140,30 @@ with tabs[0]:
         diff = summary['difference']
         if abs(diff) > 0.01:
             col3.metric("⚠️ فرق التوازن (غير متوازن)", f"{diff:,.2f} YER", delta_color="inverse")
-            st.error(f"🚨 تنبيه تدقيق SAEIS: كشف الحساب غير متوازن بفرق قدره {abs(diff):,.2f} YER!")
+            st.error(f"🚨 تنبيه تدقيق SAEIS: يوجد خلل في توازن القيود بفرق قدره {abs(diff):,.2f} YER!")
         else:
             col3.metric("✅ فرق التوازن", "0.00 YER (متوازن)")
 
-    st.write("يمكنك تعديل البيانات مباشرة في الجدول أدناه:")
-    
-    edited_df = st.data_editor(
-        st.session_state.audit_data,
-        num_rows="dynamic",
-        use_container_width=True,
-        key="audit_editor"
-    )
-    
-    if st.button("💾 Save System Changes", type="primary"):
-        st.session_state.audit_data = edited_df
-        st.success("تم حفظ التعديلات في النظام!")
+    # 5. عرض جدول القيود التفاعلي
+    if "audit_data" in st.session_state:
+        st.write("يمكنك مراجعة وتعديل بيانات القيود مباشرة أدناه:")
+        edited_df = st.data_editor(
+            st.session_state.audit_data,
+            num_rows="dynamic",
+            use_container_width=True,
+            key="audit_editor"
+        )
+        
+        if st.button("💾 Save System Changes", type="primary"):
+            st.session_state.audit_data = edited_df
+            st.success("تم حفظ التعديلات في النظام!")
 
 with tabs[1]:
     st.subheader("Add Journal Entry to Audit Engine")
 
 with tabs[2]:
     st.subheader("Export Final Audit Report")
-    st.dataframe(st.session_state.audit_data, use_container_width=True)
+    if "audit_data" in st.session_state:
+        st.dataframe(st.session_state.audit_data, use_container_width=True)
 
 st.caption("SAEIS © 2026 | Designed & Developed by Osama Abbas")
