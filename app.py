@@ -1,17 +1,18 @@
 import streamlit as st
 import pandas as pd
 import hashlib
+import io
 
 # ---------------------------------------------------------
 # 1. Page Configuration & Data Initializations
 # ---------------------------------------------------------
 st.set_page_config(
-    page_title="SAEIS - Smart Audit & ERP Integration System",
+    page_title="SAEIS - Smart Audit System",
     page_icon="📊",
     layout="wide"
 )
 
-# Password Hashing Function using native hashlib (SHA-256)
+# Password Hashing Function
 def make_hash(password):
     return hashlib.sha256(str.encode(password)).hexdigest()
 
@@ -25,7 +26,7 @@ DEFAULT_USERS = {
     "admin": {
         "name": "Osama Abbas",
         "password_hash": make_hash("admin123"),
-        "role": "Chief Auditor"
+        "role": "Chief Auditor & System Developer"
     },
     "auditor1": {
         "name": "Internal Auditor",
@@ -46,6 +47,13 @@ if "audit_data" not in st.session_state:
         {"Entry_ID": 102, "Account": "Inventory", "Description": "Frames Revaluation", "Amount": 8200.0, "Standard": "IAS 2", "Status": "Passed", "Auditor_Notes": "Valued at lower of cost or NRV"},
         {"Entry_ID": 103, "Account": "Receivables", "Description": "ECL Provision", "Amount": 3400.0, "Standard": "IFRS 9", "Status": "Under Review", "Auditor_Notes": "Recalculate credit loss rate"}
     ])
+
+# Helper function to generate Excel file download
+def convert_df_to_excel(df):
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Audit_Report')
+    return output.getvalue()
 
 # ---------------------------------------------------------
 # 2. Authentication Logic
@@ -89,25 +97,38 @@ if not st.session_state.authenticated:
                     st.rerun()
                 else:
                     st.error("Invalid username or password.")
+
+    # Developer credits on login page
+    st.markdown("---")
+    st.markdown("👨‍💻 **Developed & Designed by:** Osama Abbas")
     st.stop()
 
 # ---------------------------------------------------------
-# 4. Main Application Dashboard (CRUD)
+# 4. Main Application Dashboard (CRUD & Developer Info)
 # ---------------------------------------------------------
 with st.sidebar:
     st.title("👤 User Profile")
     st.write(f"**Name:** {st.session_state.user_info['name']}")
     st.write(f"**Role:** {st.session_state.user_info['role']}")
+    
+    st.divider()
+    
+    # Developer Section in Sidebar
+    st.markdown("### 👨‍💻 Developer Information")
+    st.markdown("**Lead Developer:** Osama Abbas")
+    st.markdown("**System:** SAEIS Platform v1.3")
+    
     st.divider()
     if st.button("🚪 Logout", use_container_width=True):
         logout()
 
 st.title("📊 SAEIS - Audit Live Dashboard & CRUD Engine")
-st.info("💡 Edit entries, update IFRS compliance statuses, or append new journal entries below.")
+st.caption("Developed by **Osama Abbas** | Smart Audit & ERP Integration System")
+st.info("💡 Edit entries, update IFRS compliance statuses, or export reports to Excel/CSV below.")
 
-tabs = st.tabs(["📑 Live Audit Editor", "➕ Add New Entry", "💾 Export Audit Report"])
+tabs = st.tabs(["📑 Live Audit Editor", "➕ Add New Entry", "📥 Export Audit Report (Excel / CSV)"])
 
-# Tab 1: Live Editor (CRUD - Update & Delete)
+# Tab 1: Live Editor
 with tabs[0]:
     st.subheader("Interactive Audit Journal Table")
     st.write("Modify cells directly in the table below and click save:")
@@ -121,9 +142,9 @@ with tabs[0]:
     
     if st.button("💾 Save System Changes", type="primary"):
         st.session_state.audit_data = edited_df
-        st.success("Audit records updated successfully in state!")
+        st.success("Audit records updated successfully!")
 
-# Tab 2: Add Entry (CRUD - Create)
+# Tab 2: Add Entry
 with tabs[1]:
     st.subheader("Add Journal Entry to Audit Engine")
     with st.form("add_entry_form"):
@@ -152,16 +173,35 @@ with tabs[1]:
             st.success("New Entry Added Successfully!")
             st.rerun()
 
-# Tab 3: Export Report
+# Tab 3: Export Excel & CSV
 with tabs[2]:
     st.subheader("Export Final Audit Report")
     st.dataframe(st.session_state.audit_data, use_container_width=True)
     
-    csv_data = st.session_state.audit_data.to_csv(index=False).encode('utf-8')
-    st.download_button(
-        label="📥 Download Audit Report (CSV)",
-        data=csv_data,
-        file_name="SAEIS_Audit_Report_v1.3.csv",
-        mime="text/csv",
-        use_container_width=True
-    )
+    col_exp1, col_exp2 = st.columns(2)
+    
+    with col_exp1:
+        # Export Excel
+        excel_data = convert_df_to_excel(st.session_state.audit_data)
+        st.download_button(
+            label="📊 Download Audit Report (EXCEL .xlsx)",
+            data=excel_data,
+            file_name="SAEIS_Audit_Report_v1.3.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
+        
+    with col_exp2:
+        # Export CSV
+        csv_data = st.session_state.audit_data.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="📄 Download Audit Report (CSV)",
+            data=csv_data,
+            file_name="SAEIS_Audit_Report_v1.3.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
+
+# Footer
+st.markdown("---")
+st.markdown("<p style='text-align: center;'>SAEIS &copy; 2026 | Designed & Developed by <b>Osama Abbas</b></p>", unsafe_allow_html=True)
