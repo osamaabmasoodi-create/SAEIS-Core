@@ -2,9 +2,10 @@ import streamlit as st
 import pandas as pd
 import hashlib
 import plotly.express as px
+import base64
 
 # ---------------------------------------------------------
-# 1. إعدادات الصفحة
+# 1. إعدادات الصفحة والشعار المدمج
 # ---------------------------------------------------------
 st.set_page_config(
     page_title="SAEIS - Smart Audit & Intelligence System",
@@ -12,20 +13,40 @@ st.set_page_config(
     layout="wide"
 )
 
-# اختيار اللغة في الشريط الجانبي
-if "lang" not in st.session_state:
-    st.session_state.lang = "EN"
+# الشعار الرسمي بنظام Base64
+SAEIS_LOGO_B64 = """
+/9j/4AAQSkZJRgABAQAAAQABAAD/4QDQRXhpZgAASUkqAAgAAAADABIBAwABAAAAAQAAADEBAgAH
+AAAAMgAAAGmHBAABAAAAOgAAAAAAAABQaWNhc2EAAAYAAJAHAAQAAAAwMjIwAaADAAEAAAABAAAA
+AqAEAAEAAAC8AAAAA6AEAAEAAAD2AAAABaAEAAEAAACqAAAAIKQCACEAAACIAAAAAAAAAGMyYjE5
+ZjYwOWM5N2U1YzkwMDAwMDAwMDAwMDAwMDAwAAACAAEAAgAEAAAAUjk4AAIABwAEAAAAMDEwMAAA
+AAD/2wCEAAMCAggICAYICAgGBggHCAcIBwgHCAcHBgYGBwgGBwcFCAgHBwcGCAUFBQUFBQoFBQcI
+CQkJBQULDQoIDQcICQgBAwQEBgUGCgYGCA0NCg0NDQ0IDQ4ICA0NCA0NCggIDQgIDQ0ICA0ICA0I
+CAgICAgNCAgICAgICAgICAgICAgICP/AABEIAPYAvAMBEQACEQEDEQH/xAAdAAEBAAIDAQEBAAAA
+AAAAAAYHAQYIBAUJ/8QAUBAAAQQBAAMGEAoGCQUAAAAAAAECAwQFBhESBwgTITJzFCIjJDEzNUFDU2Fj
+x1ItLDZCRFFkg4SRtdEVJTRSRP/EABsBAQACAwEBAAAAAAAAAAAAAAABAgMFBgQH/8QAQREAAgEC
+AgUJBQcCBQUBAAAAAAECAxEEITFSInMSIzNRFDFBgZEyIjJCYTNh/9gAMAw0A0A0A0A0A0A0A0A
+0A0A0A0AABqAOUaNhKTexHGomxA1EAADUAAAAAAAAAAAAAAAAAAAAAAWiGTUS6TsTfVGop/6htyLd
+Fx98yxhKS5sfmHeL55sbc63AMtlOmqU5nQpyrMqcDSZ5X2JdUCfeYKtenh+0S9FnwuemnRjV6D+OR
+tCnuHYHH8eTyb8tYT5Hg024G85kJeo6vJXgX0lqdapi+yYbV/uc/nZnnqVsNh9r134Zf8AJ+vDu0x1
+dceJxWIxcDuldR8MeRtWI/E2LF/h+Eg9l4A9sdDTqZ4nE592ps9Ua96arLKgtRejufLataO5FNV7G
+y4Sw75VhXdacJ5zH2u1weyzlKmj8dRWthXyke6yXEyLSdKrlKOq/iday+9HsyNfNhrdPSGBE2tmsv
+BZJjPnkoTKljX7Ksx54Ymg+bjIOlLe83wNlDDqsr05p/I0nmcFNWkfFPDNXkZy45mPilYv87JERyf
+cbI5v9p/cZ3J053sA0p1tqfJ00f3I89Wp3L9Sse2X4fB293h1Nn5S/a/29HwV5/I3R/m
+"""
+
+def render_saeis_logo(width=85):
+    clean_b64 = SAEIS_LOGO_B64.replace("\n", "").strip()
+    html_code = f'<img src="data:image/png;base64,{clean_b64}" width="{width}px" style="display:block; margin:auto; padding:5px; border-radius:8px;">'
+    st.markdown(html_code, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
 # 2. الشريط الجانبي (Sidebar)
 # ---------------------------------------------------------
+if "lang" not in st.session_state:
+    st.session_state.lang = "EN"
+
 with st.sidebar:
-    # محاولة عرض الشعار بأمان، وإذا تعذر الانتقال للرمز الاحتياطي
-    try:
-        st.image("logo.png", width=140)
-    except Exception:
-        st.title("🛡️ SAEIS")
-        
+    render_saeis_logo(width=140)
     st.session_state.lang = st.radio("🌐 Language / اللغة", ["EN", "AR"], horizontal=True)
     st.divider()
     
@@ -62,10 +83,7 @@ if "audit_data" not in st.session_state:
 col_header1, col_header2 = st.columns([1, 6])
 
 with col_header1:
-    try:
-        st.image("logo.png", width=80)
-    except Exception:
-        st.write("🛡️")
+    render_saeis_logo(width=85)
 
 with col_header2:
     st.title(TXT["title"][L])
