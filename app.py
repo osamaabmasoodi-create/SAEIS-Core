@@ -3,25 +3,34 @@ import pandas as pd
 import hashlib
 
 # ---------------------------------------------------------
-# 1. إعداد الصفحة والتهيئة
+# 1. إعدادات الصفحة والتهيئة (Page Setup)
 # ---------------------------------------------------------
 st.set_page_config(
-    page_title="SAEIS - Smart Audit Engine",
+    page_title="SAEIS - Smart Audit & ERP Integration System",
     page_icon="📊",
     layout="wide"
 )
 
+# دالة تشفير كلمة السر باستخدام hashlib السحابية
 def make_hash(password):
     return hashlib.sha256(str.encode(password)).hexdigest()
 
 def check_hash(password, hashed_text):
-    return make_hash(password) == hashed_text
+    if make_hash(password) == hashed_text:
+        return hashed_text
+    return False
 
+# قاعدة بيانات المستخدمين الأساسية
 DEFAULT_USERS = {
     "admin": {
         "name": "Osama Abbas",
         "password_hash": make_hash("admin123"),
         "role": "Chief Auditor"
+    },
+    "auditor1": {
+        "name": "Internal Auditor",
+        "password_hash": make_hash("audit123"),
+        "role": "Staff Auditor"
     }
 }
 
@@ -30,154 +39,223 @@ if "authenticated" not in st.session_state:
 if "user_info" not in st.session_state:
     st.session_state.user_info = None
 
+# بيانات القيود المحاسبية الأولية (Audit Data Engine)
+if "audit_data" not in st.session_state:
+    st.session_state.audit_data = pd.DataFrame([
+        {"Entry_ID": 101, "Account": "Buildings & Equipment", "Description": "Optics Testing Device", "Amount": 15000.0, "Standard": "IAS 16", "Status": "Violation", "Auditor_Notes": "Reclassify to Expense"},
+        {"Entry_ID": 102, "Account": "Inventory", "Description": "Frames Revaluation", "Amount": 8200.0, "Standard": "IAS 2", "Status": "Passed", "Auditor_Notes": "Valued at lower of cost or NRV"},
+        {"Entry_ID": 103, "Account": "Receivables", "Description": "ECL Provision", "Amount": 3400.0, "Standard": "IFRS 9", "Status": "Under Review", "Auditor_Notes": "Recalculate credit loss rate"}
+    ])
+
 # ---------------------------------------------------------
-# 2. تسجيل الدخول
+# 2. وظائف تسجيل الدخول (Authentication)
+# ---------------------------------------------------------
+def login(username, password):
+    if username in DEFAULT_USERS:
+        stored_hash = DEFAULT_USERS[username]["password_hash"]
+        if check_hash(password, stored_hash):
+            st.session_state.authenticated = True
+            st.session_state.user_info = {
+                "username": username,
+                "name": DEFAULT_USERS[username]["name"],
+                "role": DEFAULT_USERS[username]["role"]
+            }
+            return True
+    return False
+
+def logout():
+    st.session_state.authenticated = False
+    st.session_state.user_info = None
+    st.rerun()
+
+# ---------------------------------------------------------
+# 3. واجهة تسجيل الدخول (Login Screen)
 # ---------------------------------------------------------
 if not st.session_state.authenticated:
     st.title("🔒 SAEIS - System Login")
+    st.subheader("Smart Audit & ERP Integration System")
+    st.write("Please enter your credentials to access the live audit dashboard.")
+
     col1, col2 = st.columns([1, 2])
     with col1:
         with st.form("login_form"):
             username = st.text_input("Username", value="admin")
             password = st.text_input("Password", type="password", value="admin123")
             submit_btn = st.form_submit_button("Login 🚀", use_container_width=True)
+
             if submit_btn:
-                if username in DEFAULT_USERS and check_hash(password, DEFAULT_USERS[username]["password_hash"]):
-                    st.session_state.authenticated = True
-                    st.session_state.user_info = DEFAULT_USERS[username]
+                if login(username, password):
+                    st.success("Login Successful!")
                     st.rerun()
                 else:
-                    st.error("Invalid credentials")
+                    st.error("Invalid username or password.")
     st.stop()
 
 # ---------------------------------------------------------
-# 3. شريط التحكم والبروفايل
+# 4. لوحة التحكم والتبويبات الرئيسية (Main Dashboard)
 # ---------------------------------------------------------
 with st.sidebar:
-    st.title("👤 Developer Profile")
-    st.write(f"**Lead Developer:** {st.session_state.user_info['name']}")
+    st.title("👤 User Profile")
+    st.write(f"**Name:** {st.session_state.user_info['name']}")
     st.write(f"**Role:** {st.session_state.user_info['role']}")
-    st.write("**System:** SAEIS Engine v1.4 (Production)")
     st.divider()
     if st.button("🚪 Logout", use_container_width=True):
-        st.session_state.authenticated = False
-        st.rerun()
+        logout()
 
-st.title("📊 SAEIS - محرك التدقيق المالي الآلي")
+st.title("📊 SAEIS - Audit Live Dashboard & CRUD Engine")
+st.info("💡 Edit entries, update IFRS compliance statuses, or append new journal entries below.")
 
-# ---------------------------------------------------------
-# 4. محرك معالجة وقراءة الملفات المطور
-# ---------------------------------------------------------
-uploaded_file = st.file_uploader("📤 قم برفع دفتر اليومية أو كشف الحساب (CSV أو Excel)", type=["csv", "xlsx"])
+# إنشاء التبويبات الأربعة للمنصة
+tabs = st.tabs([
+    "📑 Live Audit Editor", 
+    "➕ Add New Entry", 
+    "💾 Export Audit Report", 
+    "📚 Knowledge Base & IFRS Guide"
+])
 
-if uploaded_file is not None:
-    try:
-        if uploaded_file.name.endswith(('.xlsx', '.xls')):
-            excel_file = pd.ExcelFile(uploaded_file)
-            sheet_dfs = []
-            for sheet in excel_file.sheet_names:
-                df_raw = pd.read_excel(excel_file, sheet_name=sheet, header=None)
-                if not df_raw.empty:
-                    sheet_dfs.append(df_raw)
-            raw_df = pd.concat(sheet_dfs, ignore_index=True) if sheet_dfs else pd.DataFrame()
-        else:
-            raw_df = pd.read_csv(uploaded_file, header=None)
+# Tab 1: التعديل المباشر على القيود (Live CRUD Editor)
+with tabs[0]:
+    st.subheader("Interactive Audit Journal Table")
+    st.write("Modify cells directly in the table below and click save:")
+    
+    edited_df = st.data_editor(
+        st.session_state.audit_data,
+        num_rows="dynamic",
+        use_container_width=True,
+        key="audit_editor"
+    )
+    
+    if st.button("💾 Save System Changes", type="primary"):
+        st.session_state.audit_data = edited_df
+        st.success("Audit records updated successfully in state!")
 
-        if not raw_df.empty:
-            header_idx = 0
-            for idx, row in raw_df.iterrows():
-                row_str = row.astype(str).str.cat(sep=' ')
-                if any(keyword in row_str for keyword in ['مدين', 'دائن', 'Debit', 'Credit', 'البيان', 'رقم القيد']):
-                    header_idx = idx
-                    break
+# Tab 2: إضافة قيد جديد (Add Entry)
+with tabs[1]:
+    st.subheader("Add Journal Entry to Audit Engine")
+    with st.form("add_entry_form"):
+        col_a, col_b = st.columns(2)
+        with col_a:
+            entry_id = st.number_input("Entry ID", min_value=100, step=1, value=int(st.session_state.audit_data["Entry_ID"].max() + 1))
+            account_name = st.text_input("Account Name", value="Sales Revenue")
+            amount = st.number_input("Amount", min_value=0.0, value=5000.0, step=100.0)
+        with col_b:
+            standard = st.selectbox("Standard", ["IAS 1", "IAS 2", "IAS 16", "IFRS 9", "IFRS 15"])
+            status = st.selectbox("Audit Status", ["Passed", "Violation", "Under Review"])
+            description = st.text_area("Auditor Notes", value="Revenue recognition review completed")
 
-            df_cleaned = raw_df.iloc[header_idx + 1:].copy()
-            df_cleaned.columns = raw_df.iloc[header_idx].astype(str).str.strip()
-            df_cleaned = df_cleaned.dropna(how='all')
-
-            debit_col, credit_col = None, None
-            for col in df_cleaned.columns:
-                c_name = str(col).lower()
-                if 'مدين' in c_name or 'debit' in c_name:
-                    debit_col = col
-                elif 'دائن' in c_name or 'credit' in c_name:
-                    credit_col = col
-
-            if debit_col is None or credit_col is None:
-                numeric_cols = []
-                for col in df_cleaned.columns:
-                    s = pd.to_numeric(df_cleaned[col], errors='coerce').fillna(0)
-                    if s.sum() > 0:
-                        numeric_cols.append((col, s.sum()))
-                numeric_cols.sort(key=lambda x: x[1], reverse=True)
-                if len(numeric_cols) >= 2:
-                    debit_col = numeric_cols[0][0]
-                    credit_col = numeric_cols[1][0]
-
-            total_debit = 0.0
-            total_credit = 0.0
-            if debit_col and credit_col:
-                total_debit = float(pd.to_numeric(df_cleaned[debit_col], errors='coerce').fillna(0).sum())
-                total_credit = float(pd.to_numeric(df_cleaned[credit_col], errors='coerce').fillna(0).sum())
-
-            diff = total_debit - total_credit
-
-            st.session_state.audit_summary = {
-                "total_debit": total_debit,
-                "total_credit": total_credit,
-                "difference": diff,
-                "count": len(df_cleaned)
+        save_entry = st.form_submit_button("➕ Add Entry")
+        if save_entry:
+            new_row = {
+                "Entry_ID": entry_id,
+                "Account": account_name,
+                "Description": "Manual Entry",
+                "Amount": amount,
+                "Standard": standard,
+                "Status": status,
+                "Auditor_Notes": description
             }
+            st.session_state.audit_data = pd.concat([st.session_state.audit_data, pd.DataFrame([new_row])], ignore_index=True)
+            st.success("New Entry Added Successfully!")
+            st.rerun()
 
-            st.session_state.audit_data = df_cleaned
-            st.success("✅ تم الفحص والربط مع محرك التدقيق بنجاح!")
-    except Exception as e:
-        st.error(f"حدث خطأ أثناء قراءة الملف: {e}")
-
-# ---------------------------------------------------------
-# 5. عرض لوحة مؤشرات التدقيق (مؤمنة بالكامل بـ get)
-# ---------------------------------------------------------
-if "audit_summary" in st.session_state:
-    summary = st.session_state.audit_summary
-    st.subheader("📈 نتائج الفحص والتوازن العام")
+# Tab 3: تصدير التقرير النهائي (Export)
+with tabs[2]:
+    st.subheader("Export Final Audit Report")
+    st.dataframe(st.session_state.audit_data, use_container_width=True)
     
-    col1, col2, col3, col4 = st.columns(4)
-    rec_count = summary.get('count', 0)
-    t_debit = summary.get('total_debit', 0.0)
-    t_credit = summary.get('total_credit', 0.0)
-    diff = summary.get('difference', 0.0)
+    csv_data = st.session_state.audit_data.to_csv(index=False).encode('utf-8')
+    st.download_button(
+        label="📥 Download Audit Report (CSV)",
+        data=csv_data,
+        file_name="SAEIS_Audit_Report_v1.3.csv",
+        mime="text/csv",
+        use_container_width=True
+    )
 
-    col1.metric("إجمالي السطور المسجلة", f"{rec_count} سطر")
-    col2.metric("إجمالي الحركات المدينة (Debit)", f"{t_debit:,.2f} YER")
-    col3.metric("إجمالي الحركات الدائنة (Credit)", f"{t_credit:,.2f} YER")
-    
-    if abs(diff) > 0.01:
-        col4.metric("⚠️ فرق التوازن (غير متوازن)", f"{diff:,.2f} YER", delta_color="inverse")
-        st.error(f"🚨 تنبيه تدقيق SAEIS: القيود غير متوازنة! يوجد فارق قدره {abs(diff):,.2f} YER.")
-    else:
-        col4.metric("✅ التوازن المحاسبي", "0.00 YER (متوازن)")
+# Tab 4: المكتبة المعرفية والدليل التطبيقي (Knowledge Base)
+with tabs[3]:
+    st.subheader("📚 Knowledge Base & IFRS Application Guide")
+    st.write("Interactive reference manual linking accounting standards to automated audit rules in SAEIS.")
 
-# ---------------------------------------------------------
-# 6. عرض جدول القيود
-# ---------------------------------------------------------
-if "audit_data" in st.session_state:
-    st.subheader("📑 كافة القيود المحاسبية المسجلة")
-    
-    def highlight_errors(val):
-        try:
-            val_num = float(val)
-            if val_num < 0:
-                return 'background-color: #ffcccc'
-        except:
-            pass
-        return ''
+    selected_standard = st.selectbox(
+        "🔍 Select IFRS/IAS Standard for Practical Guide:",
+        [
+            "IAS 16 - Property, Plant and Equipment",
+            "IAS 2 - Inventories",
+            "IFRS 9 - Financial Instruments (ECL Model)",
+            "IFRS 15 - Revenue from Contracts with Customers",
+            "IAS 1 - Presentation of Financial Statements"
+        ]
+    )
 
-    df_to_show = st.session_state.audit_data
-    try:
-        styled_df = df_to_show.style.map(highlight_errors)
-    except AttributeError:
-        styled_df = df_to_show.style.applymap(highlight_errors)
+    st.divider()
 
-    st.dataframe(styled_df, use_container_width=True)
+    if "IAS 16" in selected_standard:
+        st.markdown("### 🏛️ IAS 16: Property, Plant and Equipment")
+        col_m1, col_m2 = st.columns(2)
+        with col_m1:
+            st.info("**💡 Capitalization Criteria:**\n"
+                    "- Probable future economic benefits to the entity.\n"
+                    "- Cost can be measured reliably.\n"
+                    "- Day-to-day servicing costs must be expensed immediately.")
+        with col_m2:
+            st.warning("**⚠️ SAEIS Audit Rule Logic:**\n"
+                       "- Flags operational maintenance accounts capitalized as fixed assets.\n"
+                       "- Verifies depreciation rates based on useful life and residual value.")
+            
+        st.markdown("#### 📝 Code / Accounting Rule Example:")
+        st.code("""
+# Incorrect Entry:
+# Dr. Property, Plant & Equipment  $15,000
+#    Cr. Cash / Bank                   $15,000  (Regular Maintenance)
 
-st.caption("SAEIS © 2026 | Smart Audit & ERP Integration Engine | Designed & Developed by Osama Abbas")
+# Correct Reclassification Adjustment (IAS 16 Compliance):
+# Dr. Maintenance & Repairs Expense $15,000
+#    Cr. Property, Plant & Equipment   $15,000
+        """, language="python")
+
+    elif "IAS 2" in selected_standard:
+        st.markdown("### 📦 IAS 2: Inventories")
+        col_m1, col_m2 = st.columns(2)
+        with col_m1:
+            st.info("**💡 Valuation Rule:**\n"
+                    "- Inventory measured at lower of Cost or Net Realizable Value (NRV).\n"
+                    "- Excludes storage costs and abnormal waste from inventory cost.")
+        with col_m2:
+            st.warning("**⚠️ SAEIS Audit Rule Logic:**\n"
+                       "- Detects slow-moving or damaged stock missing price-decline provisions.\n"
+                       "- Reconciles physical count with ERP (e.g. Onyx Pro / Odoo) records.")
+
+    elif "IFRS 9" in selected_standard:
+        st.markdown("### 💳 IFRS 9: Financial Instruments")
+        st.info("**💡 ECL (Expected Credit Loss) Framework:**\n"
+                "- Forward-looking model for provision accounting on trade receivables.\n"
+                "- Builds loss rates based on historical default rates adjusted for macroeconomic factors.")
+
+    elif "IFRS 15" in selected_standard:
+        st.markdown("### 📈 IFRS 15: Revenue from Contracts with Customers")
+        st.info("**💡 5-Step Revenue Recognition Model:**\n"
+                "1. Identify the contract(s) with a customer.\n"
+                "2. Identify the performance obligations in the contract.\n"
+                "3. Determine the transaction price.\n"
+                "4. Allocate transaction price to performance obligations.\n"
+                "5. Recognize revenue when (or as) performance obligation is satisfied.")
+
+    elif "IAS 1" in selected_standard:
+        st.markdown("### 📊 IAS 1: Presentation of Financial Statements")
+        st.info("**💡 Core Presentation Rules:**\n"
+                "- Strict separation of Current vs Non-Current assets and liabilities.\n"
+                "- Offsetting assets and liabilities or income and expenses is prohibited unless permitted by IFRS.")
+
+    st.divider()
+    st.subheader("📥 Educational Resources & Tools")
+    col_d1, col_d2, col_d3 = st.columns(3)
+    with col_d1:
+        st.markdown("**📄 Audit Checklist (PDF)**")
+        st.caption("Standard audit guidelines for journal entry verification")
+    with col_d2:
+        st.markdown("**📊 ECL Calculation Model (Excel)**")
+        st.caption("Ready-to-use template for IFRS 9 implementation")
+    with col_d3:
+        st.markdown("**🎓 Video Tutorials**")
+        st.caption("Guides for ERP integration and smart audit engines")
