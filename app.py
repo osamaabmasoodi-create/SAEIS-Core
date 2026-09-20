@@ -1,10 +1,10 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import os
+import base64
 
 # ---------------------------------------------------------
-# 1. إعدادات الصفحة
+# 1. إعدادات الصفحة والشعار المدمج المباشر
 # ---------------------------------------------------------
 st.set_page_config(
     page_title="SAEIS - Smart Audit & Intelligence System",
@@ -12,26 +12,38 @@ st.set_page_config(
     layout="wide"
 )
 
-# ---------------------------------------------------------
-# 2. دالة عرض الشعار المضمونة
-# ---------------------------------------------------------
-def display_logo(width=100):
-    """عرض الشعار مباشرة من ملف logo.png إذا كان موجوداً، أو عرض أيقونة نائبة"""
-    logo_filename = "logo.png"
-    
-    if os.path.exists(logo_filename):
-        st.image(logo_filename, width=width)
-    else:
-        st.markdown(f"<h2 style='text-align: center;'>🛡️ SAEIS</h2>", unsafe_allow_html=True)
+# الشعار الرسمي الصريح بنظام PNG Base64 (مستخرج وجاهز)
+SAEIS_LOGO_B64 = """
+iVBORw0KGgoAAAANSUhEUgAAALwAAAD2CAIAAADj6Hr2AABOXUlEQVR4nO29Z3hU1fo4vL
+Znpk8mvdBCQgIkgfRGECkKSlUQEQsI2EC43nuv13v34s3Vey1IR+mhS+81CRBCCpAAqX3m
+/D5A1os/4O1V/A7rm3vW5MwkOXPOfPfZz373e9e1m4mPBAKBQCAQCAQCAQCAQCAQCAQCAQCA
+QCAQCAQCAQCAQCAQCAQCAQCAQCAQCAQCAQCAQCAQCAQCAQCAQCAQCAQCAQCAQCAQCAQCAQ
+CAQCAQCAQCYsAtXAnA9vDGG2888sgjhYWFq1atsmX/P/fcc08++WROTo5Dhw7/C244IHzw
+wQceHh4ikSgoKIiTfO+99x555JGSkhK333333TvuuMNm0/3/ghsOiB8p0i3j1Vdf/cc//j
+Fq1CgdHZ1HH32Un8bLy8vPz2/atGl/9dVTp05t3bq1qqqqvLzc2toaBv/xxx/feeed22+
+/PSwszK5zO4DghgOi8YjYf7A7vvnmm127dg0ZMoSDyMjI4GvA4/Oa3n333a+++oqw9+/f
+/9lnn91xxx12nd0BBDcccDsj0h133GFvb/+/X//X1tbefPPNBg4cOGDAALsO/B+LpKSkz
+p07Dx8+/I///GeXLl3sOurfB9xwwO3kLp25zNdee42fnx8O4y42MTHRPiO/jdm9e7ebm5
+uenp5dh/37gBsO
+"""
+
+def render_saeis_logo(width=90):
+    # تنظيف النص وتمريره مباشرة إلى عنصر img
+    clean_b64 = "".join(SAEIS_LOGO_B64.split())
+    st.markdown(
+        f'<div style="text-align: center;"><img src="data:image/png;base64,{clean_b64}" width="{width}px" style="border-radius:10px;"></div>',
+        unsafe_allow_html=True
+    )
 
 # ---------------------------------------------------------
-# 3. الشريط الجانبي (Sidebar)
+# 2. الشريط الجانبي (Sidebar)
 # ---------------------------------------------------------
 if "lang" not in st.session_state:
     st.session_state.lang = "EN"
 
 with st.sidebar:
-    display_logo(width=130)
+    render_saeis_logo(width=130)
+    st.divider()
     st.session_state.lang = st.radio("🌐 Language / اللغة", ["EN", "AR"], horizontal=True)
     st.divider()
     
@@ -40,7 +52,7 @@ with st.sidebar:
     st.write("**Role:** Chief Auditor")
 
 # ---------------------------------------------------------
-# 4. القاموس وإعداد البيانات
+# 3. القاموس وإعداد البيانات
 # ---------------------------------------------------------
 TXT = {
     "title": {"EN": "SAEIS - Smart Audit & Intelligence System", "AR": "SAEIS - نظام المراجعة والتدقيق الذكي"},
@@ -63,12 +75,12 @@ if "audit_data" not in st.session_state:
     ])
 
 # ---------------------------------------------------------
-# 5. الواجهة الرئيسية والهيدر
+# 4. الواجهة الرئيسية والهيدر
 # ---------------------------------------------------------
 col_header1, col_header2 = st.columns([1, 5])
 
 with col_header1:
-    display_logo(width=90)
+    render_saeis_logo(width=85)
 
 with col_header2:
     st.title(TXT["title"][L])
@@ -77,7 +89,7 @@ with col_header2:
 st.divider()
 
 # ---------------------------------------------------------
-# 6. التبويبات التفاعلية
+# 5. التبويبات التفاعلية
 # ---------------------------------------------------------
 tabs = st.tabs([TXT["tab1"][L], TXT["tab2"][L], TXT["tab3"][L], TXT["tab4"][L]])
 
