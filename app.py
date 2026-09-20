@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import base64
 import os
 
 # ---------------------------------------------------------
@@ -14,31 +13,16 @@ st.set_page_config(
 )
 
 # ---------------------------------------------------------
-# 2. دالة تحميل وقراءة الشعار بأمان
+# 2. دالة عرض الشعار المضمونة
 # ---------------------------------------------------------
-def get_image_base64(path):
-    """تتحقق من وجود الملف في المسار المحدد أو المسار المحلي وتحوله إلى Base64"""
-    possible_paths = [
-        path,
-        r"C:\Users\Administrator\Desktop\SAEIS\logo.png",
-        "logo.png"
-    ]
-    for p in possible_paths:
-        if os.path.exists(p):
-            try:
-                with open(p, "rb") as image_file:
-                    return base64.b64encode(image_file.read()).decode()
-            except Exception:
-                continue
-    return None
-
-def render_saeis_logo(width=85):
-    img_b64 = get_image_base64("logo.png")
-    if img_b64:
-        html_code = f'<img src="data:image/png;base64,{img_b64}" width="{width}px" style="display:block; margin:auto; padding:5px; border-radius:8px;">'
-        st.markdown(html_code, unsafe_allow_html=True)
+def display_logo(width=100):
+    """عرض الشعار مباشرة من ملف logo.png إذا كان موجوداً، أو عرض أيقونة نائبة"""
+    logo_filename = "logo.png"
+    
+    if os.path.exists(logo_filename):
+        st.image(logo_filename, width=width)
     else:
-        st.markdown(f"<h1 style='text-align: center;'>🛡️</h1>", unsafe_allow_html=True)
+        st.markdown(f"<h2 style='text-align: center;'>🛡️ SAEIS</h2>", unsafe_allow_html=True)
 
 # ---------------------------------------------------------
 # 3. الشريط الجانبي (Sidebar)
@@ -47,7 +31,7 @@ if "lang" not in st.session_state:
     st.session_state.lang = "EN"
 
 with st.sidebar:
-    render_saeis_logo(width=130)
+    display_logo(width=130)
     st.session_state.lang = st.radio("🌐 Language / اللغة", ["EN", "AR"], horizontal=True)
     st.divider()
     
@@ -81,10 +65,10 @@ if "audit_data" not in st.session_state:
 # ---------------------------------------------------------
 # 5. الواجهة الرئيسية والهيدر
 # ---------------------------------------------------------
-col_header1, col_header2 = st.columns([1, 6])
+col_header1, col_header2 = st.columns([1, 5])
 
 with col_header1:
-    render_saeis_logo(width=85)
+    display_logo(width=90)
 
 with col_header2:
     st.title(TXT["title"][L])
