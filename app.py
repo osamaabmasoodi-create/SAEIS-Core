@@ -17,7 +17,7 @@ st.set_page_config(
 if "lang" not in st.session_state:
     st.session_state.lang = "EN"
 
-# CSS مخصص لتحسين مظهر الشعار والهيدر
+# تصحيح المعامل إلى unsafe_allow_html=True
 st.markdown("""
     <style>
     .logo-img {
@@ -36,7 +36,7 @@ st.markdown("""
         margin-right: 12px;
     }
     </style>
-""", unsafe_unsafe_html=True if hasattr(st, 'config') else True)
+""", unsafe_allow_html=True)
 
 # ---------------------------------------------------------
 # 2. الشريط الجانبي (Sidebar) بالشعار الاحترافي
