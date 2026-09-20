@@ -2,13 +2,14 @@ import streamlit as st
 import pandas as pd
 import hashlib
 import plotly.express as px
+import os
 
 # ---------------------------------------------------------
-# 1. إعدادات الصفحة وتعدد اللغات (Language Toggle)
+# 1. إعدادات الصفحة والهوية البصرية
 # ---------------------------------------------------------
 st.set_page_config(
-    page_title="SAEIS - Smart Audit Engine",
-    page_icon="📊",
+    page_title="SAEIS - Smart Audit & Intelligence System",
+    page_icon="🛡️",
     layout="wide"
 )
 
@@ -16,13 +17,51 @@ st.set_page_config(
 if "lang" not in st.session_state:
     st.session_state.lang = "EN"
 
-with st.sidebar:
-    st.session_state.lang = st.radio("🌐 Language / اللغة", ["EN", "AR"], horizontal=True)
+# CSS مخصص لتحسين مظهر الشعار والهيدر
+st.markdown("""
+    <style>
+    .logo-img {
+        display: block;
+        margin-left: auto;
+        margin-right: auto;
+        width: 140px;
+        border-radius: 12px;
+        box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.15);
+        margin-bottom: 15px;
+    }
+    .header-logo {
+        width: 65px;
+        border-radius: 8px;
+        vertical-align: middle;
+        margin-right: 12px;
+    }
+    </style>
+""", unsafe_unsafe_html=True if hasattr(st, 'config') else True)
 
-# قاموس النصوص لدعم اللغتين (Bilingual Dictionary)
+# ---------------------------------------------------------
+# 2. الشريط الجانبي (Sidebar) بالشعار الاحترافي
+# ---------------------------------------------------------
+logo_path = "logo.png"
+
+with st.sidebar:
+    if os.path.exists(logo_path):
+        st.image(logo_path, width=150)
+    else:
+        st.title("🛡️ SAEIS")
+    
+    st.session_state.lang = st.radio("🌐 Language / اللغة", ["EN", "AR"], horizontal=True)
+    st.divider()
+    
+    st.markdown("### 👤 User Profile")
+    st.write("**Name:** Osama Abbas")
+    st.write("**Role:** Chief Auditor")
+
+# ---------------------------------------------------------
+# 3. القاموس وإعداد البيانات
+# ---------------------------------------------------------
 TXT = {
-    "title": {"EN": "📊 SAEIS - Smart Audit Engine", "AR": "📊 SAEIS - محرك التدقيق المالي الذكي"},
-    "subtitle": {"EN": "Edit entries, analyze risks, and review IFRS guidelines.", "AR": "تعديل القيود، تحليل المخاطر المحاسبية، ومراجعة معايير IFRS."},
+    "title": {"EN": "SAEIS - Smart Audit & Intelligence System", "AR": "SAEIS - نظام المراجعة والتدقيق الذكي"},
+    "subtitle": {"EN": "Automated IFRS/IAS Compliance, Risk Analytics & ERP Integration Engine", "AR": "محرك أتمتة الامتثال لمعايير IFRS/IAS، تحليل المخاطر، والربط مع أنظمة ERP"},
     "tab1": {"EN": "📑 Live Editor", "AR": "📑 التعديل المباشر"},
     "tab2": {"EN": "📈 Analytics Dashboard", "AR": "📈 التقارير والرسوم البيانية"},
     "tab3": {"EN": "➕ Add Entry", "AR": "➕ إضافة قيد"},
@@ -30,15 +69,6 @@ TXT = {
 }
 
 L = st.session_state.lang
-
-# ---------------------------------------------------------
-# 2. تهيئة البيانات وقاعدة البيانات السحابية (Supabase Ready)
-# ---------------------------------------------------------
-def make_hash(password):
-    return hashlib.sha256(str.encode(password)).hexdigest()
-
-if "authenticated" not in st.session_state:
-    st.session_state.authenticated = True  # مفعل للتجربة المباشرة
 
 if "audit_data" not in st.session_state:
     st.session_state.audit_data = pd.DataFrame([
@@ -50,32 +80,38 @@ if "audit_data" not in st.session_state:
     ])
 
 # ---------------------------------------------------------
-# 3. الواجهة الرئيسية والتبويبات
+# 4. الواجهة الرئيسية
 # ---------------------------------------------------------
-st.title(TXT["title"][L])
-st.caption(TXT["subtitle"][L])
+col_header1, col_header2 = st.columns([1, 6])
+
+with col_header1:
+    if os.path.exists(logo_path):
+        st.image(logo_path, width=90)
+
+with col_header2:
+    st.title(TXT["title"][L])
+    st.caption(TXT["subtitle"][L])
+
+st.divider()
 
 tabs = st.tabs([TXT["tab1"][L], TXT["tab2"][L], TXT["tab3"][L], TXT["tab4"][L]])
 
 # Tab 1: Live Editor
 with tabs[0]:
-    st.subheader(" Interactive Audit Table" if L == "EN" else "جدول القيود المحاسبية التفاعلي")
+    st.subheader("Interactive Audit Journal Table" if L == "EN" else "جدول القيود المحاسبية التفاعلي")
     edited_df = st.data_editor(st.session_state.audit_data, num_rows="dynamic", use_container_width=True)
-    if st.button("💾 Save Changes" if L == "EN" else "💾 حفظ التغييرات"):
+    if st.button("💾 Save System Changes" if L == "EN" else "💾 حفظ التغييرات", type="primary"):
         st.session_state.audit_data = edited_df
         st.success("Updated successfully!" if L == "EN" else "تم الحفظ بنجاح!")
 
-# Tab 2: Analytics Dashboard (الخطوة الذهبية 4)
+# Tab 2: Analytics Dashboard
 with tabs[1]:
-    st.subheader("📊 Compliance & Audit Risk Analytics" if L == "EN" else "📊 تحليلات الامتثال والمخاطر المحاسبية")
-    
+    st.subheader("📊 Audit Risk & Compliance Analytics" if L == "EN" else "📊 تحليلات الامتثال والمخاطر المحاسبية")
     df = st.session_state.audit_data
     col_a, col_b = st.columns(2)
-    
     with col_a:
         fig_status = px.pie(df, names="Status", title="Audit Status Distribution", color_discrete_sequence=px.colors.qualitative.Pastel)
         st.plotly_chart(fig_status, use_container_width=True)
-        
     with col_b:
         fig_risk = px.bar(df, x="Standard", y="Amount", color="Status", title="Amount Exposure by Standard", barmode="group")
         st.plotly_chart(fig_risk, use_container_width=True)
@@ -96,10 +132,9 @@ with tabs[2]:
             st.session_state.audit_data = pd.concat([st.session_state.audit_data, pd.DataFrame([new_row])], ignore_index=True)
             st.rerun()
 
-# Tab 4: Knowledge Base (توسيع المعايير - IFRS 16 & IAS 36)
+# Tab 4: Knowledge Base
 with tabs[3]:
     st.subheader("📚 Expanded IFRS Knowledge Base" if L == "EN" else "📚 المكتبة المعرفية الشاملة")
-    
     selected_std = st.selectbox(
         "Select Standard:",
         [
@@ -109,15 +144,12 @@ with tabs[3]:
             "IFRS 9 - Financial Instruments"
         ]
     )
-    
     st.divider()
-    
     if "IFRS 16" in selected_std:
         st.markdown("### 🏢 IFRS 16: Leases")
         st.info("**Key Principle:** Eliminates off-balance sheet accounting for lessees by recognizing Right-of-Use (ROU) Assets and Lease Liabilities.")
         st.warning("**SAEIS Audit Rule:** Identifies rent expenses that should be capitalized under IFRS 16.")
-        
     elif "IAS 36" in selected_std:
         st.markdown("### 📉 IAS 36: Impairment of Assets")
-        st.info("**Key Principle:** Ensures assets are carried at no more than their recoverable amount (higher of Fair Value less costs to sell and Value in Use).")
+        st.info("**Key Principle:** Ensures assets are carried at no more than their recoverable amount.")
         st.warning("**SAEIS Audit Rule:** Triggers impairment review when carrying amount exceeds estimated recoverable limits.")
