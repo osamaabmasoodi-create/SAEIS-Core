@@ -2,6 +2,13 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import numpy as np
+import io
+
+# استدعاء مكتبات ReportLab لتوليد تقارير PDF
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
 
 # ---------------------------------------------------------
 # 1. إعدادات الصفحة والشعار المدمج
@@ -27,7 +34,6 @@ def render_saeis_logo(width=100):
 # 2. محرك توحيد وتنظيف عناوين جدول البيانات المرفوع
 # ---------------------------------------------------------
 def standardize_columns(df):
-    """تحويل أسمائ الأعمدة العربية والإنجليزية الشائعة إلى المسميات المعيارية"""
     mapping = {
         'اسم الحساب': 'Account', 'الحساب': 'Account', 'البيان': 'Account', 'اسم_الحساب': 'Account', 'Account Name': 'Account',
         'مدين': 'Debit', 'المدين': 'Debit', 'مبلغ مدين': 'Debit',
@@ -36,10 +42,7 @@ def standardize_columns(df):
         'صافي القيمة القابلة للتحقق': 'NRV', 'القيمة القابلة للتحقق': 'NRV', 'NRV Value': 'NRV',
         'أيام التأخير': 'Days_Overdue', 'عمر الدين': 'Days_Overdue', 'تأخير': 'Days_Overdue', 'Days': 'Days_Overdue'
     }
-    # إعادة تسمية الأعمدة المطابقة
     renamed_df = df.rename(columns=mapping)
-    
-    # تحويل القيم الفارغة و Unnamed إلى قيم برمجية نظيفة
     renamed_df = renamed_df.loc[:, ~renamed_df.columns.str.contains('^Unnamed')]
     return renamed_df
 
@@ -137,7 +140,75 @@ def execute_full_audit(df):
     return all_findings
 
 # ---------------------------------------------------------
-# 4. إدارة الجلسة
+# 4. محرك إنشاء تقرير PDF النهائي (PDF Report Generator Engine)
+# ---------------------------------------------------------
+def generate_audit_pdf(audit_results_df, user_name="Osama Abbas", user_role="Chief Auditor"):
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
+    story = []
+    
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=18, textColor=colors.HexColor('#1E3A8A'), alignment=1, spaceAfter=12)
+    subtitle_style = ParagraphStyle('SubTitleStyle', parent=styles['Normal'], fontSize=11, textColor=colors.HexColor('#4B5563'), alignment=1, spaceAfter=20)
+    section_style = ParagraphStyle('SectionStyle', parent=styles['Heading2'], fontSize=13, textColor=colors.HexColor('#1E3A8A'), spaceBefore=10, spaceAfter=10)
+    cell_style = ParagraphStyle('CellStyle', parent=styles['Normal'], fontSize=9, leading=11)
+    
+    # عنوان التقرير
+    story.append(Paragraph("<b>SAEIS - Executive Audit & Compliance Report</b>", title_style))
+    story.append(Paragraph(f"<b>Prepared By:</b> {user_name} ({user_role}) | <b>System:</b> Smart Audit Engine v1.0", subtitle_style))
+    story.append(Spacer(1, 10))
+    
+    # ملخص الملاحظات
+    total_findings = len(audit_results_df)
+    high_risks = len(audit_results_df[audit_results_df['Risk_Level'] == 'High']) if not audit_results_df.empty else 0
+    
+    summary_text = f"<b>Summary of Audit Audit Execution:</b><br/>" \
+                   f"• Total Compliance Exceptions Identified: <b>{total_findings}</b><br/>" \
+                   f"• High Risk Exposure Items: <b>{high_risks}</b>"
+    story.append(Paragraph(summary_text, styles['Normal']))
+    story.append(Spacer(1, 15))
+    
+    # جدول الملاحظات
+    story.append(Paragraph("<b>Detailed Audit Findings & Adjusting Entries:</b>", section_style))
+    
+    if audit_results_df.empty:
+        story.append(Paragraph("No audit exceptions or compliance issues detected in the dataset.", styles['Normal']))
+    else:
+        table_data = [["Standard", "Account / Item", "Risk Level", "Issue & Recommended Adjusting Entry"]]
+        
+        for idx, row in audit_results_df.iterrows():
+            std = str(row.get('Standard', ''))
+            item = str(row.get('Item', ''))
+            risk = str(row.get('Risk_Level', ''))
+            issue = f"<b>Finding:</b> {row.get('Issue', '')}<br/><b>Adjusting Entry:</b> {row.get('Adjusting_Entry', '')}"
+            
+            table_data.append([
+                Paragraph(std, cell_style),
+                Paragraph(item, cell_style),
+                Paragraph(risk, cell_style),
+                Paragraph(issue, cell_style)
+            ])
+            
+        t = Table(table_data, colWidths=[65, 110, 65, 300])
+        t.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1E3A8A')),
+            ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
+            ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+            ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0,0), (-1,0), 10),
+            ('BOTTOMPADDING', (0,0), (-1,0), 8),
+            ('BACKGROUND', (0,1), (-1,-1), colors.HexColor('#F9FAFB')),
+            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E5E7EB')),
+            ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ]))
+        story.append(t)
+        
+    doc.build(story)
+    buffer.seek(0)
+    return buffer
+
+# ---------------------------------------------------------
+# 5. إدارة الجلسة وتسجيل الدخول
 # ---------------------------------------------------------
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
@@ -157,9 +228,6 @@ if "lang" not in st.session_state:
 if "audit_results" not in st.session_state:
     st.session_state.audit_results = pd.DataFrame()
 
-# ---------------------------------------------------------
-# 5. تسجيل الدخول
-# ---------------------------------------------------------
 if not st.session_state.authenticated:
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
@@ -237,15 +305,12 @@ with tabs[0]:
         uploaded_file = st.file_uploader("اختر ملف القيود أو ميزان المراجعة:" if L == "AR" else "Upload Trial Balance or Journal Entries:", type=["xlsx", "xls", "csv"])
         if uploaded_file is not None:
             try:
-                # قراءة الملف بدون التسبب بأعمدة فارغة
                 if uploaded_file.name.endswith(".csv"):
                     df_new = pd.read_csv(uploaded_file)
                 else:
                     df_new = pd.read_excel(uploaded_file)
                 
-                # إزالة الصفوف والأعمدة الفارغة بالكامل
                 df_new = df_new.dropna(how='all').dropna(axis=1, how='all')
-                
                 st.session_state.audit_data = df_new
                 st.success("تم استيراد الملف وتنظيف البيانات بنجاح! يمكنك الانتقال إلى التبويب الثاني للفحص." if L == "AR" else "File imported successfully! Navigate to Tab 2 for auditing.")
             except Exception as e:
@@ -266,9 +331,8 @@ with tabs[1]:
     st.subheader("جدول القيود المحاسبية التفاعلي والمراجعة البرمجية" if L == "AR" else "Interactive Audit Journal & Automated Rules Verification")
     
     df = st.session_state.audit_data
-    
-    # احتساب الميزان تلقائياً إذا أمكن
     df_check = standardize_columns(df)
+    
     if "Debit" in df_check.columns and "Credit" in df_check.columns:
         total_debit = pd.to_numeric(df_check["Debit"], errors='coerce').sum()
         total_credit = pd.to_numeric(df_check["Credit"], errors='coerce').sum()
@@ -282,7 +346,6 @@ with tabs[1]:
         if diff != 0:
             st.warning("⚠️ تنبيه: إجمالي القيود غير متوازن!" if L == "AR" else "⚠️ Warning: Journal entries are out of balance!")
     
-    # عرض الجدول للتعديل
     edited_df = st.data_editor(df, num_rows="dynamic", use_container_width=True)
     
     col_act1, col_act2 = st.columns(2)
@@ -294,8 +357,6 @@ with tabs[1]:
     with col_act2:
         if st.button("⚡ تشغيل محرك الفحص الآلي" if L == "AR" else "⚡ Run Automated Audit Engine", type="primary", use_container_width=True):
             st.session_state.audit_data = edited_df
-            
-            # تنفيذ الفحص
             results = execute_full_audit(edited_df)
             st.session_state.audit_results = results
             
@@ -304,7 +365,7 @@ with tabs[1]:
             else:
                 st.warning(f"تم رصد {len(results)} ملاحظة عدم امتثال للمعايير الدولية!" if L == "AR" else f"Detected {len(results)} potential compliance issues!")
 
-    # عرض نتائج التدقيق والملاحظات
+    # عرض نتائج التدقيق وتوليد PDF
     if "audit_results" in st.session_state and not st.session_state.audit_results.empty:
         st.divider()
         st.markdown("### 🚨 ملاحظات التدقيق والقيود التصحيحية المقترحة" if L == "AR" else "### 🚨 Audit Findings & Proposed Adjusting Entries")
@@ -316,13 +377,22 @@ with tabs[1]:
             with st.expander(f"[{row['Standard']}] {row['Item']} - مستوى المخاطرة: :{badge_color}[{row['Risk_Level']}]"):
                 st.write(f"**المشكلة المكتشفة:** {row['Issue']}")
                 st.info(f"💡 **القيد التصحيحي المقترح / Adjusting Entry:**\n\n`{row['Adjusting_Entry']}`")
+        
+        st.divider()
+        # زر التصدير لتقرير PDF
+        pdf_buffer = generate_audit_pdf(results_df, user_name=st.session_state.get('user_name', 'Osama Abbas'), user_role=st.session_state.get('user_role', 'Chief Auditor'))
+        st.download_button(
+            label="📄 تحميل تقرير التدقيق النهائي (PDF)" if L == "AR" else "📄 Download Final Audit Report (PDF)",
+            data=pdf_buffer,
+            file_name="SAEIS_Audit_Report.pdf",
+            mime="application/pdf",
+            type="primary"
+        )
 
 # --- Tab 3: Analytics & Risks ---
 with tabs[2]:
     st.subheader("📊 تحليلات المخاطر والامتثال المحاسبي" if L == "AR" else "📊 Compliance & Audit Risk Dashboard")
-    
-    df = st.session_state.audit_data
-    df_clean = standardize_columns(df)
+    df_clean = standardize_columns(st.session_state.audit_data)
     
     if "Standard" in df_clean.columns:
         col_chart1, col_chart2 = st.columns(2)
@@ -338,7 +408,6 @@ with tabs[2]:
 # --- Tab 4: IFRS Knowledge Base ---
 with tabs[3]:
     st.subheader("📚 مكتبة ودليل المعايير الدولية المعتمدة" if L == "AR" else "📚 Rules & IFRS/IAS Standard Engine")
-    
     st.markdown("""
     * **IAS 1**: Presentation of Financial Statements (عرض القوائم المالية)
     * **IAS 2**: Inventories - Lower of Cost or Net Realizable Value (المخزون وصافي القيمة القابلة للتحقق)
