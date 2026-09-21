@@ -4,7 +4,7 @@ import plotly.express as px
 import numpy as np
 import io
 
-# استدعاء ReportLab بطريقة آمنة
+# استدعاء مكتبة ReportLab بشكل آمن ومضمون
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -31,7 +31,7 @@ def render_saeis_logo(width=100):
     )
 
 # ---------------------------------------------------------
-# 2. توحيد المسميات والبيانات
+# 2. توحيد المسميات والبيانات المحاسبية
 # ---------------------------------------------------------
 def standardize_columns(df):
     mapping = {
@@ -47,7 +47,7 @@ def standardize_columns(df):
     return renamed_df
 
 # ---------------------------------------------------------
-# 3. محرك التدقيق والتحقق الآلي
+# 3. محرك التدقيق والتحقق الآلي (IFRS/IAS Engine)
 # ---------------------------------------------------------
 def run_ias2_check(df):
     findings = []
@@ -140,7 +140,7 @@ def execute_full_audit(df):
     return all_findings
 
 # ---------------------------------------------------------
-# 4. محرك توليد الـ PDF الآمن للمستضيف السحابي
+# 4. محرك توليد الـ PDF المستقر
 # ---------------------------------------------------------
 def generate_audit_pdf(audit_results_df, user_name="Osama Abbas", user_role="Chief Auditor"):
     buffer = io.BytesIO()
@@ -157,15 +157,15 @@ def generate_audit_pdf(audit_results_df, user_name="Osama Abbas", user_role="Chi
     story.append(Paragraph(f"<b>Prepared By:</b> {user_name} ({user_role}) | <b>System Engine:</b> SAEIS v1.0", subtitle_style))
     story.append(Spacer(1, 10))
     
-    total_findings = len(audit_results_df)
+    total_findings = len(audit_results_df) if not audit_results_df.empty else 0
     high_risks = len(audit_results_df[audit_results_df['Risk_Level'] == 'High']) if not audit_results_df.empty else 0
     
     summary_text = f"• Total Exceptions Identified: <b>{total_findings}</b> | High Risk Items: <b>{high_risks}</b>"
     story.append(Paragraph(summary_text, cell_style))
     story.append(Spacer(1, 15))
     
-    if audit_results_df.empty:
-        story.append(Paragraph("No audit exceptions or compliance issues detected in dataset.", cell_style))
+    if audit_results_df is None or audit_results_df.empty:
+        story.append(Paragraph("No audit exceptions or compliance violations detected in dataset.", cell_style))
     else:
         table_data = [["Standard", "Item / Account", "Risk", "Finding & Proposed Adjusting Entry"]]
         
@@ -198,7 +198,7 @@ def generate_audit_pdf(audit_results_df, user_name="Osama Abbas", user_role="Chi
     return buffer
 
 # ---------------------------------------------------------
-# 5. إدارة الجلسة وتسجيل الدخول
+# 5. التهيئة وتسجيل الدخول
 # ---------------------------------------------------------
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
@@ -217,6 +217,9 @@ if "lang" not in st.session_state:
 
 if "audit_results" not in st.session_state:
     st.session_state.audit_results = pd.DataFrame()
+
+if "audit_ran" not in st.session_state:
+    st.session_state.audit_ran = False
 
 if not st.session_state.authenticated:
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -245,7 +248,7 @@ if not st.session_state.authenticated:
     st.stop()
 
 # ---------------------------------------------------------
-# 6. الهيدر والشريط الجانبي
+# 6. الشريط الجانبي
 # ---------------------------------------------------------
 with st.sidebar:
     render_saeis_logo(width=110)
@@ -282,7 +285,7 @@ with col_h2:
 st.divider()
 
 # ---------------------------------------------------------
-# 7. التبويبات والموديولات
+# 7. واجهة التبويبات
 # ---------------------------------------------------------
 tabs = st.tabs([TXT["tab1"][L], TXT["tab2"][L], TXT["tab3"][L], TXT["tab4"][L]])
 
@@ -302,7 +305,8 @@ with tabs[0]:
                 
                 df_new = df_new.dropna(how='all').dropna(axis=1, how='all')
                 st.session_state.audit_data = df_new
-                st.success("تم استيراد الملف بنجاح! يمكنك الانتقال إلى التبويب الثاني للفحص." if L == "AR" else "File imported successfully!")
+                st.session_state.audit_ran = False
+                st.success("تم استيراد الملف بنجاح! انتقل إلى التبويب الثاني وانقر على 'تشغيل محرك الفحص الآلي'." if L == "AR" else "File imported successfully!")
             except Exception as e:
                 st.error(f"حدث خطأ أثناء قراءة الملف: {e}")
     else:
@@ -346,32 +350,34 @@ with tabs[1]:
             st.session_state.audit_data = edited_df
             results = execute_full_audit(edited_df)
             st.session_state.audit_results = results
-            
-            if results.empty:
-                st.success("لم يتم اكتشاف أي مخالفات لمعايير IFRS/IAS في البيانات الحالية!" if L == "AR" else "No compliance violations detected!")
-            else:
-                st.warning(f"تم رصد {len(results)} ملاحظة عدم امتثال للمعايير الدولية!" if L == "AR" else f"Detected {len(results)} potential compliance issues!")
+            st.session_state.audit_ran = True
 
-    if "audit_results" in st.session_state and not st.session_state.audit_results.empty:
+    # التقرير يظهر تلقائياً بمجرد ضغط زر الفحص
+    if st.session_state.get("audit_ran", False):
         st.divider()
-        st.markdown("### 🚨 ملاحظات التدقيق والقيود التصحيحية المقترحة" if L == "AR" else "### 🚨 Audit Findings & Proposed Adjusting Entries")
+        st.markdown("### 🚨 نتائج الفحص وتقارير الامتثال" if L == "AR" else "### 🚨 Compliance & Audit Findings")
         
-        results_df = st.session_state.audit_results
+        results_df = st.session_state.get("audit_results", pd.DataFrame())
         
-        for idx, row in results_df.iterrows():
-            badge_color = "red" if row["Risk_Level"] == "High" else "orange"
-            with st.expander(f"[{row['Standard']}] {row['Item']} - مستوى المخاطرة: :{badge_color}[{row['Risk_Level']}]"):
-                st.write(f"**المشكلة المكتشفة:** {row['Issue']}")
-                st.info(f"💡 **القيد التصحيحي المقترح / Adjusting Entry:**\n\n`{row['Adjusting_Entry']}`")
+        if results_df.empty:
+            st.success("✅ تم فحص البيانات: لم يتم العثور على مخالفات صريحة للمعايير المحاسبية المبرمجة." if L == "AR" else "✅ No non-compliance issues found.")
+        else:
+            for idx, row in results_df.iterrows():
+                badge_color = "red" if row["Risk_Level"] == "High" else "orange"
+                with st.expander(f"[{row['Standard']}] {row['Item']} - مستوى المخاطرة: :{badge_color}[{row['Risk_Level']}]"):
+                    st.write(f"**المشكلة المكتشفة:** {row['Issue']}")
+                    st.info(f"💡 **القيد التصحيحي المقترح:**\n\n`{row['Adjusting_Entry']}`")
         
-        st.divider()
+        st.write("")
+        # زر التحميل التفاعلي
         pdf_buffer = generate_audit_pdf(results_df, user_name=st.session_state.get('user_name', 'Osama Abbas'), user_role=st.session_state.get('user_role', 'Chief Auditor'))
         st.download_button(
-            label="📄 تحميل تقرير التدقيق النهائي (PDF)" if L == "AR" else "📄 Download Final Audit Report (PDF)",
+            label="📄 تصدير وتنزيل تقرير التدقيق النهائي (PDF)" if L == "AR" else "📄 Download Final Audit Report (PDF)",
             data=pdf_buffer,
             file_name="SAEIS_Audit_Report.pdf",
             mime="application/pdf",
-            type="primary"
+            type="primary",
+            use_container_width=True
         )
 
 # --- Tab 3 ---
