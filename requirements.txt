@@ -5,3 +5,5 @@ xlsxwriter
 scikit-learn
 plotly
 reportlab
+arabic-reshaper
+python-bidi
