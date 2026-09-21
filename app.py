@@ -12,13 +12,11 @@ st.set_page_config(
     layout="wide"
 )
 
-# الشعار الرسمي المدمج بنظام PNG Base64
 SAEIS_LOGO_B64 = """
 iVBORw0KGgoAAAANSUhEUgAAAHMAAACWCAYAAADtyrfXAAAkDUlEQVR4nO2deZwcV3Xvv+feqt6mZ9PMSNZiyfJu2ZKN5Q3jhWCHODyCE0hCICFxSML2XvLgZXnkwfvkkeQlLEkg8LADCUtYDMEYbAirbYyNwfIib7JlyZYlWbb2Zfbp7qq697w/qnumZ6ZljWZG29A/fUrV011Vd/nVOffcc8+9F5poookmmmiiiSaaaKKJJo455Fhn4AhKuXSI56LowxzrDMwyxDGiBTGylcjzkz4fU69zHOPzBoppu5sq58dkPvQG95wJZCr/l27xtTpOyeIPVELIA3ONZIiIP/J972zO5/vefNZpyy+Jhno/cX8vLYfPrtz353PbN74lQ984sv7gDKQATyp5Nakd+L5hMGJRuZE8mp/J+nnhflbP/wXv75oob02CQff8NTOLYWfPLOJNZu2c/7JZ/FfTjuLpctPGjGt4dd29vf96Hd+51O3ws4SKXFB9VlKY3KPe5wIZMbEt1NJLNz+wb9YZVqDG3rOWnT5+m07V67b/CL3PbKFzdsT+oYCgmwHRI6OMGHJAsflF/dw4cr5LJmXWVfpS+6rDHR94Q3vev/jQAkI4GrgnomkwnFO7PFK5sHUKKQE5t7+G7/R9fKzs2+/4PxTV+1XvX7dll3c9eBmHnx2P71xAW8KQIaiLaAjCQSGESoExuAqA3TmSlx4ThcvX7WU8085ldO6Ftz2/BMbnnjwsfWf+sBXv3WAVA1PlFYanI8bHG9kTiTRkFaaB/TMYrH7ps/8r1/ck/jXhNnCa/dt39axbtMmvvf0VnbtSdByGwV7EpLkAMWZMs5UIJOg4kFDXJLFujZMEuCjfgrhAAu7Iy66YAGrzl3EqfMKfa2x+1a+u+d7f/nXH7/jrod27Ge8geWreTvuSD0eyGwgfVcL3AOQLFrU2vXP//DfFueSk945r9jyit19u1Y+8PQG7nr0OTbu9gxGRch0YkxEVkfIJjGZJMTQQiJZIiNuqM04k1A4hTLCS84i154x416pD
 """
 
 def render_saeis_logo(width=100):
-    """دالة عرض الشعار الحاضنة"""
     clean_b64 = "".join(SAEIS_LOGO_B64.split())
     st.markdown(
         f'<div style="text-align: center;"><img src="data:image/png;base64,{clean_b64}" width="{width}px" style="border-radius:10px;"></div>',
@@ -26,19 +24,39 @@ def render_saeis_logo(width=100):
     )
 
 # ---------------------------------------------------------
-# 2. محرك قواعد المراجعة والتحقق الآلي (Audit Rules Engine)
+# 2. محرك توحيد وتنظيف عناوين جدول البيانات المرفوع
 # ---------------------------------------------------------
-def run_ias2_check(df, cost_col='Cost', nrv_col='NRV', item_col='Account'):
+def standardize_columns(df):
+    """تحويل أسمائ الأعمدة العربية والإنجليزية الشائعة إلى المسميات المعيارية"""
+    mapping = {
+        'اسم الحساب': 'Account', 'الحساب': 'Account', 'البيان': 'Account', 'اسم_الحساب': 'Account', 'Account Name': 'Account',
+        'مدين': 'Debit', 'المدين': 'Debit', 'مبلغ مدين': 'Debit',
+        'دائن': 'Credit', 'الدائن': 'Credit', 'مبلغ دائن': 'Credit',
+        'التكلفة': 'Cost', 'تكلفة المخزون': 'Cost',
+        'صافي القيمة القابلة للتحقق': 'NRV', 'القيمة القابلة للتحقق': 'NRV', 'NRV Value': 'NRV',
+        'أيام التأخير': 'Days_Overdue', 'عمر الدين': 'Days_Overdue', 'تأخير': 'Days_Overdue', 'Days': 'Days_Overdue'
+    }
+    # إعادة تسمية الأعمدة المطابقة
+    renamed_df = df.rename(columns=mapping)
+    
+    # تحويل القيم الفارغة و Unnamed إلى قيم برمجية نظيفة
+    renamed_df = renamed_df.loc[:, ~renamed_df.columns.str.contains('^Unnamed')]
+    return renamed_df
+
+# ---------------------------------------------------------
+# 3. محرك قواعد التدقيق والتحقق الآلي (Audit Rules Engine)
+# ---------------------------------------------------------
+def run_ias2_check(df):
     findings = []
-    if cost_col in df.columns and nrv_col in df.columns:
+    if 'Cost' in df.columns and 'NRV' in df.columns:
         for idx, row in df.iterrows():
-            cost = row[cost_col]
-            nrv = row[nrv_col]
-            if pd.notnull(cost) and pd.notnull(nrv) and nrv < cost:
+            cost = pd.to_numeric(row.get('Cost'), errors='coerce')
+            nrv = pd.to_numeric(row.get('NRV'), errors='coerce')
+            if pd.notnull(cost) and pd.notnull(nrv) and nrv < cost and cost > 0:
                 impairment = cost - nrv
                 findings.append({
                     "Row_ID": idx,
-                    "Item": row.get(item_col, f"Row {idx}"),
+                    "Item": row.get('Account', f"Row {idx}"),
                     "Standard": "IAS 2",
                     "Issue": f"المخزون مقيّم بأعلى من صافي القيمة القابلة للتحقق (NRV). مقدار الانخفاض: {impairment:,.2f}",
                     "Risk_Level": "High",
@@ -46,14 +64,14 @@ def run_ias2_check(df, cost_col='Cost', nrv_col='NRV', item_col='Account'):
                 })
     return pd.DataFrame(findings)
 
-def run_ias16_check(df, debit_col='Debit', account_col='Account', threshold=5000.0):
+def run_ias16_check(df, threshold=5000.0):
     findings = []
     keywords = ['صيانة', 'تطوير', 'تجديد', 'مواصفات', 'Maintenance', 'Repair', 'Upgrade', 'Renovation']
-    if debit_col in df.columns and account_col in df.columns:
+    if 'Debit' in df.columns and 'Account' in df.columns:
         for idx, row in df.iterrows():
-            account_name = str(row[account_col])
-            debit_val = row[debit_col]
-            if any(kw.lower() in account_name.lower() for kw in keywords) and debit_val >= threshold:
+            account_name = str(row.get('Account', ''))
+            debit_val = pd.to_numeric(row.get('Debit'), errors='coerce')
+            if pd.notnull(debit_val) and any(kw.lower() in account_name.lower() for kw in keywords) and debit_val >= threshold:
                 findings.append({
                     "Row_ID": idx,
                     "Item": account_name,
@@ -64,7 +82,7 @@ def run_ias16_check(df, debit_col='Debit', account_col='Account', threshold=5000
                 })
     return pd.DataFrame(findings)
 
-def run_ifrs9_check(df, amount_col='Debit', aging_col='Days_Overdue', account_col='Account'):
+def run_ifrs9_check(df):
     findings = []
     def get_ecl_rate(days):
         if days <= 30: return 0.01
@@ -73,31 +91,31 @@ def run_ifrs9_check(df, amount_col='Debit', aging_col='Days_Overdue', account_co
         elif days <= 180: return 0.35
         else: return 0.75
 
-    if aging_col in df.columns and amount_col in df.columns:
+    if 'Days_Overdue' in df.columns and 'Debit' in df.columns:
         for idx, row in df.iterrows():
-            days = row[aging_col]
-            amount = row[amount_col]
-            if pd.notnull(days) and pd.notnull(amount) and days > 30:
+            days = pd.to_numeric(row.get('Days_Overdue'), errors='coerce')
+            amount = pd.to_numeric(row.get('Debit'), errors='coerce')
+            if pd.notnull(days) and pd.notnull(amount) and days > 30 and amount > 0:
                 rate = get_ecl_rate(days)
                 required_provision = amount * rate
                 findings.append({
                     "Row_ID": idx,
-                    "Item": row.get(account_col, f"Row {idx}"),
+                    "Item": row.get('Account', f"Row {idx}"),
                     "Standard": "IFRS 9",
-                    "Issue": f"ذمم متأخرة منذ {days} يوم. نسبة ECL المقدرة: {rate*100:.0f}%. المخصص المطلوب: {required_provision:,.2f}",
+                    "Issue": f"ذمم متأخرة منذ {days:.0f} يوم. نسبة ECL المقدرة: {rate*100:.0f}%. المخصص المطلوب: {required_provision:,.2f}",
                     "Risk_Level": "High" if days > 90 else "Medium",
                     "Adjusting_Entry": f"من حـ/ مصروف خسائر ائتمانية متوقعة {required_provision:,.2f} | إلى حـ/ مخصص الخسائر الائتمانية المتوقعة {required_provision:,.2f}"
                 })
     return pd.DataFrame(findings)
 
-def run_ifrs16_check(df, account_col='Account', debit_col='Debit'):
+def run_ifrs16_check(df):
     findings = []
     keywords = ['إيجار', 'ايجار', 'إيجارات', 'Lease', 'Rent']
-    if account_col in df.columns and debit_col in df.columns:
+    if 'Account' in df.columns and 'Debit' in df.columns:
         for idx, row in df.iterrows():
-            account_name = str(row[account_col])
-            debit_val = row[debit_col]
-            if any(kw.lower() in account_name.lower() for kw in keywords) and debit_val > 10000:
+            account_name = str(row.get('Account', ''))
+            debit_val = pd.to_numeric(row.get('Debit'), errors='coerce')
+            if pd.notnull(debit_val) and any(kw.lower() in account_name.lower() for kw in keywords) and debit_val > 10000:
                 findings.append({
                     "Row_ID": idx,
                     "Item": account_name,
@@ -109,22 +127,22 @@ def run_ifrs16_check(df, account_col='Account', debit_col='Debit'):
     return pd.DataFrame(findings)
 
 def execute_full_audit(df):
-    results_ias2 = run_ias2_check(df)
-    results_ias16 = run_ias16_check(df)
-    results_ifrs9 = run_ifrs9_check(df)
-    results_ifrs16 = run_ifrs16_check(df)
+    df_clean = standardize_columns(df)
+    results_ias2 = run_ias2_check(df_clean)
+    results_ias16 = run_ias16_check(df_clean)
+    results_ifrs9 = run_ifrs9_check(df_clean)
+    results_ifrs16 = run_ifrs16_check(df_clean)
     
     all_findings = pd.concat([results_ias2, results_ias16, results_ifrs9, results_ifrs16], ignore_index=True)
     return all_findings
 
 # ---------------------------------------------------------
-# 3. إدارة جلسة العمل (Session State)
+# 4. إدارة الجلسة
 # ---------------------------------------------------------
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 
 if "audit_data" not in st.session_state:
-    # بيانات قيود اختبار افتراضية مع كامل الحقول المحاسبية
     st.session_state.audit_data = pd.DataFrame([
         {"Entry_ID": "JE-101", "Account": "صيانة مباني وإصلاحات", "Debit": 15000.0, "Credit": 15000.0, "Standard": "IAS 16", "Status": "Under Review", "Risk": "High", "Cost": 0.0, "NRV": 0.0, "Days_Overdue": 0},
         {"Entry_ID": "JE-102", "Account": "مخزون بضاعة بالطريق", "Debit": 8200.0, "Credit": 8200.0, "Standard": "IAS 2", "Status": "Violation", "Risk": "High", "Cost": 8200.0, "NRV": 6500.0, "Days_Overdue": 0},
@@ -134,13 +152,13 @@ if "audit_data" not in st.session_state:
     ])
 
 if "lang" not in st.session_state:
-    st.session_state.lang = "EN"
+    st.session_state.lang = "AR"
 
 if "audit_results" not in st.session_state:
     st.session_state.audit_results = pd.DataFrame()
 
 # ---------------------------------------------------------
-# 4. شاشة تسجيل الدخول
+# 5. تسجيل الدخول
 # ---------------------------------------------------------
 if not st.session_state.authenticated:
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -169,11 +187,11 @@ if not st.session_state.authenticated:
     st.stop()
 
 # ---------------------------------------------------------
-# 5. الشريط الجانبي والهيدر
+# 6. الشريط الجانبي والهيدر
 # ---------------------------------------------------------
 with st.sidebar:
     render_saeis_logo(width=110)
-    st.session_state.lang = st.radio("🌐 Language / اللغة", ["EN", "AR"], horizontal=True)
+    st.session_state.lang = st.radio("🌐 Language / اللغة", ["AR", "EN"], horizontal=True)
     st.divider()
     
     st.markdown("### 👤 User Profile")
@@ -186,10 +204,10 @@ with st.sidebar:
         st.rerun()
 
 TXT = {
-    "title": {"EN": "SAEIS - Smart Audit & Intelligence System", "AR": "SAEIS - نظام المراجعة والتدقيق الذكي"},
-    "subtitle": {"EN": "Automated IFRS/IAS Compliance, Risk Analytics & ERP Integration Engine", "AR": "محرك أتمتة الامتثال لمعايير IFRS/IAS، تحليل المخاطر، والربط مع أنظمة ERP"},
+    "title": {"EN": "SAEIS - Smart Audit & Intelligence System", "AR": "نظام المراجعة والتدقيق الذكي - SAEIS"},
+    "subtitle": {"EN": "Automated IFRS/IAS Compliance & Risk Analytics Engine", "AR": "محرك أتمتة الامتثال لمعايير IFRS/IAS وتحليل المخاطر المحاسبية"},
     "tab1": {"EN": "📁 Data Ingestion", "AR": "📁 استيراد البيانات"},
-    "tab2": {"EN": "📑 Live Editor & Audit Engine", "AR": "📑 التعديل وفحص المعايير الآلي"},
+    "tab2": {"EN": "📑 Live Editor & Audit Engine", "AR": "📑 التعديل وفحص المعايير البرمجي"},
     "tab3": {"EN": "📊 Analytics & Risks", "AR": "📊 تحليلات المخاطر والامتثال"},
     "tab4": {"EN": "📚 IFRS Knowledge Base", "AR": "📚 مكتبة المعايير الدولية"}
 }
@@ -206,27 +224,32 @@ with col_h2:
 st.divider()
 
 # ---------------------------------------------------------
-# 6. التبويبات والموديولات الرئيسية
+# 7. التبويبات والموديولات الرئيسية
 # ---------------------------------------------------------
 tabs = st.tabs([TXT["tab1"][L], TXT["tab2"][L], TXT["tab3"][L], TXT["tab4"][L]])
 
 # --- Tab 1: Data Ingestion ---
 with tabs[0]:
-    st.subheader("Data Upload & ERP Integration" if L == "EN" else "استيراد ملفات القيود والربط السحابي")
-    source = st.radio("Select Source:" if L == "EN" else "اختر مصدر البيانات:", ["Excel / CSV File", "ERP API Connection (Odoo / Onyx Pro)"], horizontal=True)
+    st.subheader("استيراد ملفات القيود والربط السحابي" if L == "AR" else "Data Upload & ERP Integration")
+    source = st.radio("اختر مصدر البيانات:" if L == "AR" else "Select Source:", ["Excel / CSV File", "ERP API Connection (Odoo / Onyx Pro)"], horizontal=True)
     
     if source == "Excel / CSV File":
-        uploaded_file = st.file_uploader("Upload Trial Balance or Journal Entries" if L == "EN" else "اختر ملف القيود أو ميزان المراجعة:", type=["xlsx", "xls", "csv"])
+        uploaded_file = st.file_uploader("اختر ملف القيود أو ميزان المراجعة:" if L == "AR" else "Upload Trial Balance or Journal Entries:", type=["xlsx", "xls", "csv"])
         if uploaded_file is not None:
             try:
+                # قراءة الملف بدون التسبب بأعمدة فارغة
                 if uploaded_file.name.endswith(".csv"):
                     df_new = pd.read_csv(uploaded_file)
                 else:
                     df_new = pd.read_excel(uploaded_file)
+                
+                # إزالة الصفوف والأعمدة الفارغة بالكامل
+                df_new = df_new.dropna(how='all').dropna(axis=1, how='all')
+                
                 st.session_state.audit_data = df_new
-                st.success("File imported successfully!" if L == "EN" else "تم استيراد الملف وتحديث البيانات بنجاح!")
+                st.success("تم استيراد الملف وتنظيف البيانات بنجاح! يمكنك الانتقال إلى التبويب الثاني للفحص." if L == "AR" else "File imported successfully! Navigate to Tab 2 for auditing.")
             except Exception as e:
-                st.error(f"Error reading file: {e}" if L == "EN" else f"حدث خطأ أثناء قراءة الملف: {e}")
+                st.error(f"حدث خطأ أثناء قراءة الملف: {e}")
     else:
         st.info("🔗 API Live Integration Engine (Odoo v16+ & Onyx Pro ERP)")
         col_api1, col_api2 = st.columns(2)
@@ -235,79 +258,86 @@ with tabs[0]:
             st.text_input("API Key / Token", value="••••••••••••••••", type="password")
         with col_api2:
             st.selectbox("Target Fiscal Year", ["2026", "2025"])
-            if st.button("Sync ERP Data Now" if L == "EN" else "مزامنة البيانات الآن", type="primary"):
-                st.success("Data synced successfully from ERP!" if L == "EN" else "تمت المزامنة بنجاح من نظام ERP!")
+            if st.button("مزامنة البيانات الآن" if L == "AR" else "Sync ERP Data Now", type="primary"):
+                st.success("تمت المزامنة بنجاح من نظام ERP!" if L == "AR" else "Data synced successfully from ERP!")
 
 # --- Tab 2: Live Editor & Audit Engine ---
 with tabs[1]:
-    st.subheader("Interactive Audit Journal & Automated Rules Verification" if L == "EN" else "جدول القيود المحاسبية التفاعلي والمراجعة البرمجية")
+    st.subheader("جدول القيود المحاسبية التفاعلي والمراجعة البرمجية" if L == "AR" else "Interactive Audit Journal & Automated Rules Verification")
     
     df = st.session_state.audit_data
     
-    # ميزان التدقيق
-    if "Debit" in df.columns and "Credit" in df.columns:
-        total_debit = df["Debit"].sum()
-        total_credit = df["Credit"].sum()
+    # احتساب الميزان تلقائياً إذا أمكن
+    df_check = standardize_columns(df)
+    if "Debit" in df_check.columns and "Credit" in df_check.columns:
+        total_debit = pd.to_numeric(df_check["Debit"], errors='coerce').sum()
+        total_credit = pd.to_numeric(df_check["Credit"], errors='coerce').sum()
         diff = total_debit - total_credit
         
         m1, m2, m3 = st.columns(3)
-        m1.metric("Total Debit / إجمالي المدين", f"{total_debit:,.2f}")
-        m2.metric("Total Credit / إجمالي الدائن", f"{total_credit:,.2f}")
-        m3.metric("Imbalance / الفرق", f"{diff:,.2f}", delta_color="inverse" if diff != 0 else "normal")
+        m1.metric("إجمالي المدين / Total Debit", f"{total_debit:,.2f}")
+        m2.metric("إجمالي الدائن / Total Credit", f"{total_credit:,.2f}")
+        m3.metric("الفرق / Imbalance", f"{diff:,.2f}", delta_color="inverse" if diff != 0 else "normal")
         
         if diff != 0:
-            st.warning("⚠️ Warning: Trial balance or Journal entries are out of balance!" if L == "EN" else "⚠️ تنبيه: إجمالي القيود غير متوازن!")
+            st.warning("⚠️ تنبيه: إجمالي القيود غير متوازن!" if L == "AR" else "⚠️ Warning: Journal entries are out of balance!")
     
+    # عرض الجدول للتعديل
     edited_df = st.data_editor(df, num_rows="dynamic", use_container_width=True)
     
     col_act1, col_act2 = st.columns(2)
     with col_act1:
-        if st.button("💾 Save System Changes" if L == "EN" else "💾 حفظ التغييرات", type="secondary", use_container_width=True):
+        if st.button("💾 حفظ التغييرات" if L == "AR" else "💾 Save System Changes", type="secondary", use_container_width=True):
             st.session_state.audit_data = edited_df
-            st.success("Data stored successfully!" if L == "EN" else "تم حفظ التغييرات بنجاح!")
+            st.success("تم حفظ التغييرات بنجاح!" if L == "AR" else "Data stored successfully!")
             
     with col_act2:
-        if st.button("⚡ Run Automated Audit Engine" if L == "EN" else "⚡ تشغيل محرك الفحص الآلي", type="primary", use_container_width=True):
+        if st.button("⚡ تشغيل محرك الفحص الآلي" if L == "AR" else "⚡ Run Automated Audit Engine", type="primary", use_container_width=True):
             st.session_state.audit_data = edited_df
+            
+            # تنفيذ الفحص
             results = execute_full_audit(edited_df)
             st.session_state.audit_results = results
+            
             if results.empty:
-                st.success("No compliance violations detected!" if L == "EN" else "لم يتم اكتشاف أي مخالفات لمعايير IFRS/IAS!")
+                st.success("لم يتم اكتشاف أي مخالفات لمعايير IFRS/IAS في البيانات الحالية!" if L == "AR" else "No compliance violations detected!")
             else:
-                st.warning(f"Detected {len(results)} potential compliance issues!" if L == "EN" else f"تم رصد {len(results)} ملاحظات عدم امتثال للمعايير!")
+                st.warning(f"تم رصد {len(results)} ملاحظة عدم امتثال للمعايير الدولية!" if L == "AR" else f"Detected {len(results)} potential compliance issues!")
 
-    # عرض النتائج والتوصيات المكتشفة
+    # عرض نتائج التدقيق والملاحظات
     if "audit_results" in st.session_state and not st.session_state.audit_results.empty:
         st.divider()
-        st.markdown("### 🚨 Audit Findings & Proposed Adjusting Entries" if L == "EN" else "### 🚨 ملاحظات التدقيق والقيود التصحيحية المقترحة")
+        st.markdown("### 🚨 ملاحظات التدقيق والقيود التصحيحية المقترحة" if L == "AR" else "### 🚨 Audit Findings & Proposed Adjusting Entries")
         
         results_df = st.session_state.audit_results
         
         for idx, row in results_df.iterrows():
             badge_color = "red" if row["Risk_Level"] == "High" else "orange"
-            with st.expander(f"[{row['Standard']}] {row['Item']} - Risk Level: :{badge_color}[{row['Risk_Level']}]"):
-                st.write(f"**المشكلة المكتشفة / Finding:** {row['Issue']}")
-                st.info(f"💡 **القيد التصحيحي المقترح / Adjusting Journal Entry:**\n\n`{row['Adjusting_Entry']}`")
+            with st.expander(f"[{row['Standard']}] {row['Item']} - مستوى المخاطرة: :{badge_color}[{row['Risk_Level']}]"):
+                st.write(f"**المشكلة المكتشفة:** {row['Issue']}")
+                st.info(f"💡 **القيد التصحيحي المقترح / Adjusting Entry:**\n\n`{row['Adjusting_Entry']}`")
 
 # --- Tab 3: Analytics & Risks ---
-with tabs[3-1]:
-    st.subheader("📊 Compliance & Audit Risk Dashboard" if L == "EN" else "📊 تحليلات المخاطر والامتثال المحاسبي")
+with tabs[2]:
+    st.subheader("📊 تحليلات المخاطر والامتثال المحاسبي" if L == "AR" else "📊 Compliance & Audit Risk Dashboard")
     
     df = st.session_state.audit_data
-    if "Status" in df.columns and "Risk" in df.columns:
+    df_clean = standardize_columns(df)
+    
+    if "Standard" in df_clean.columns:
         col_chart1, col_chart2 = st.columns(2)
         with col_chart1:
-            fig_status = px.pie(df, names="Status", title="Audit Status Distribution", color_discrete_sequence=px.colors.qualitative.Set2)
+            fig_status = px.pie(df_clean, names="Standard", title="توزيع البيانات حسب المعيار المحاسبي", color_discrete_sequence=px.colors.qualitative.Set2)
             st.plotly_chart(fig_status, use_container_width=True)
         with col_chart2:
-            fig_risk = px.bar(df, x="Standard", y="Debit" if "Debit" in df.columns else "Entry_ID", color="Risk", title="Risk Exposure by IFRS Standard", barmode="group")
+            fig_risk = px.bar(df_clean, x="Standard", y="Debit" if "Debit" in df_clean.columns else None, title="حجم المبالغ حسب المعيار", barmode="group")
             st.plotly_chart(fig_risk, use_container_width=True)
     else:
-        st.info("No audit status or risk columns found in current dataset." if L == "EN" else "لا تتوفر أعمدة حالة المراجعة والمخاطر في البيانات الحالية.")
+        st.info("قم بتشغيل محرك الفحص الآلي لعرض الرسوم البيانية وتحليلات المخاطر." if L == "AR" else "Run automated engine to display analytics.")
 
 # --- Tab 4: IFRS Knowledge Base ---
 with tabs[3]:
-    st.subheader("📚 Rules & IFRS/IAS Standard Engine" if L == "EN" else "📚 مكتبة ودليل المعايير الدولية المعتمدة")
+    st.subheader("📚 مكتبة ودليل المعايير الدولية المعتمدة" if L == "AR" else "📚 Rules & IFRS/IAS Standard Engine")
     
     st.markdown("""
     * **IAS 1**: Presentation of Financial Statements (عرض القوائم المالية)
@@ -318,4 +348,4 @@ with tabs[3]:
     * **IFRS 15**: Revenue from Contracts with Customers (الاعتراف بالإيرادات)
     * **IFRS 16**: Leases - Right of Use (ROU) Asset & Lease Liabilities (عقود الإيجارات وحق الاستخدام)
     """)
-    st.info("💡 SAEIS applies dynamic automated rule validation engine on dataset for IAS 2, IAS 16, IFRS 9, and IFRS 16." if L == "EN" else "💡 ينفذ نظام SAEIS قواعد الفحص والامتثال الذكي تلقائياً بناءً على محرك القواعد الداخلي.")
+    st.info("💡 ينفذ نظام SAEIS قواعد الفحص والامتثال الذكي تلقائياً بناءً على محرك القواعد المدمج." if L == "AR" else "💡 SAEIS applies dynamic automated rule validation engine on dataset.")
