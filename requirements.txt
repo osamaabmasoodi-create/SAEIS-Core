@@ -4,5 +4,3 @@ openpyxl
 xlsxwriter
 plotly
 reportlab
-arabic-reshaper
-python-bidi
