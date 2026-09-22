@@ -1,13 +1,22 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import numpy as np
 import io
+
+# استدعاء وحدة قاعدة البيانات المحفوظة
+from database import init_db, save_journal_data, load_journal_data
 
 # استدعاء مكتبة ReportLab بشكل آمن
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
+
+# ---------------------------------------------------------
+# 0. تهيئة قاعدة البيانات
+# ---------------------------------------------------------
+init_db()
 
 # ---------------------------------------------------------
 # 1. إعدادات الصفحة والشعار
@@ -46,7 +55,7 @@ def standardize_columns(df):
     return renamed_df
 
 # ---------------------------------------------------------
-# 3. محرك التدقيق والتحقق الآلي
+# 3. محرك التدقيق والتحقق الآلي (IFRS/IAS Engine)
 # ---------------------------------------------------------
 def run_ias2_check(df):
     findings = []
@@ -197,19 +206,10 @@ def generate_audit_pdf(audit_results_df, user_name="Osama Abbas", user_role="Chi
     return buffer
 
 # ---------------------------------------------------------
-# 5. التهيئة وتسجيل الدخول
+# 5. التهيئة وتسجيل الدخول واسترجاع البيانات المحفوظة
 # ---------------------------------------------------------
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
-
-if "audit_data" not in st.session_state:
-    st.session_state.audit_data = pd.DataFrame([
-        {"Entry_ID": "JE-101", "Account": "صيانة مباني وإصلاحات", "Debit": 15000.0, "Credit": 15000.0, "Standard": "IAS 16", "Status": "Under Review", "Risk": "High", "Cost": 0.0, "NRV": 0.0, "Days_Overdue": 0},
-        {"Entry_ID": "JE-102", "Account": "مخزون بضاعة بالطريق", "Debit": 8200.0, "Credit": 8200.0, "Standard": "IAS 2", "Status": "Violation", "Risk": "High", "Cost": 8200.0, "NRV": 6500.0, "Days_Overdue": 0},
-        {"Entry_ID": "JE-103", "Account": "ذمم تجارية - عميل أ", "Debit": 12000.0, "Credit": 0.0, "Standard": "IFRS 9", "Status": "Under Review", "Risk": "Medium", "Cost": 0.0, "NRV": 0.0, "Days_Overdue": 120},
-        {"Entry_ID": "JE-104", "Account": "إيجار مقرات وفروع", "Debit": 24000.0, "Credit": 24000.0, "Standard": "IFRS 16", "Status": "Violation", "Risk": "High", "Cost": 0.0, "NRV": 0.0, "Days_Overdue": 0},
-        {"Entry_ID": "JE-105", "Account": "خسائر انخفاض قيمة", "Debit": 5000.0, "Credit": 5000.0, "Standard": "IAS 36", "Status": "Passed", "Risk": "Low", "Cost": 0.0, "NRV": 0.0, "Days_Overdue": 0}
-    ])
 
 if "lang" not in st.session_state:
     st.session_state.lang = "AR"
@@ -240,7 +240,23 @@ if not st.session_state.authenticated:
                     st.session_state.authenticated = True
                     st.session_state.user_name = user_input
                     st.session_state.user_role = role_input
-                    st.success("Access Granted! / تم تسجيل الدخول بنجاح")
+                    
+                    # استرجاع البيانات المحفوظة من قاعدة البيانات للمستخدم
+                    db_df = load_journal_data(user_id=user_input)
+                    if not db_df.empty:
+                        st.session_state.audit_data = db_df
+                    else:
+                        default_data = pd.DataFrame([
+                            {"Entry_ID": "JE-101", "Account": "صيانة مباني وإصلاحات", "Debit": 15000.0, "Credit": 15000.0, "Cost": 0.0, "NRV": 0.0, "Days_Overdue": 0},
+                            {"Entry_ID": "JE-102", "Account": "مخزون بضاعة بالطريق", "Debit": 8200.0, "Credit": 8200.0, "Cost": 8200.0, "NRV": 6500.0, "Days_Overdue": 0},
+                            {"Entry_ID": "JE-103", "Account": "ذمم تجارية - عميل أ", "Debit": 12000.0, "Credit": 0.0, "Cost": 0.0, "NRV": 0.0, "Days_Overdue": 120},
+                            {"Entry_ID": "JE-104", "Account": "إيجار مقرات وفروع", "Debit": 24000.0, "Credit": 24000.0, "Cost": 0.0, "NRV": 0.0, "Days_Overdue": 0},
+                            {"Entry_ID": "JE-105", "Account": "خسائر انخفاض قيمة", "Debit": 5000.0, "Credit": 5000.0, "Cost": 0.0, "NRV": 0.0, "Days_Overdue": 0}
+                        ])
+                        st.session_state.audit_data = default_data
+                        save_journal_data(default_data, user_id=user_input)
+
+                    st.success("Access Granted! / تم تسجيل الدخول واسترجاع البيانات المحفوظة بنجاح")
                     st.rerun()
                 else:
                     st.error("Invalid Credentials / كلمة السر غير صحيحة")
@@ -305,7 +321,10 @@ with tabs[0]:
                 df_new = df_new.dropna(how='all').dropna(axis=1, how='all')
                 st.session_state.audit_data = df_new
                 st.session_state.audit_ran = False
-                st.success("تم استيراد الملف بنجاح! انتقل إلى التبويب الثاني وانقر على 'تشغيل محرك الفحص الآلي'." if L == "AR" else "File imported successfully!")
+                
+                # حفظ الملف الجديد مباشرة في قاعدة البيانات
+                save_journal_data(df_new, user_id=st.session_state.get('user_name', 'Osama Abbas'))
+                st.success("تم استيراد الملف وحفظه دائماً في قاعدة البيانات بنجاح!" if L == "AR" else "File imported & persisted successfully!")
             except Exception as e:
                 st.error(f"حدث خطأ أثناء قراءة الملف: {e}")
     else:
@@ -323,7 +342,7 @@ with tabs[0]:
 with tabs[1]:
     st.subheader("جدول القيود المحاسبية التفاعلي والمراجعة البرمجية" if L == "AR" else "Interactive Audit Journal & Automated Rules Verification")
     
-    df = st.session_state.audit_data
+    df = st.session_state.get("audit_data", pd.DataFrame())
     df_check = standardize_columns(df)
     
     if "Debit" in df_check.columns and "Credit" in df_check.columns:
@@ -340,9 +359,11 @@ with tabs[1]:
     
     col_act1, col_act2 = st.columns(2)
     with col_act1:
-        if st.button("💾 حفظ التغييرات" if L == "AR" else "💾 Save Changes", type="secondary", use_container_width=True):
+        if st.button("💾 حفظ التغييرات دائمًا" if L == "AR" else "💾 Save Changes Permanently", type="secondary", use_container_width=True):
             st.session_state.audit_data = edited_df
-            st.success("تم حفظ التغييرات بنجاح!" if L == "AR" else "Data stored successfully!")
+            # حفظ التعديلات مباشرة في قاعدة البيانات
+            save_journal_data(edited_df, user_id=st.session_state.get('user_name', 'Osama Abbas'))
+            st.success("تم حفظ التعديلات في قاعدة البيانات دائمًا بنجاح!" if L == "AR" else "Data stored permanently in database!")
             
     with col_act2:
         if st.button("⚡ تشغيل محرك الفحص الآلي" if L == "AR" else "⚡ Run Audit Engine", type="primary", use_container_width=True):
@@ -380,7 +401,7 @@ with tabs[1]:
 # --- Tab 3 ---
 with tabs[2]:
     st.subheader("📊 تحليلات المخاطر والامتثال المحاسبي" if L == "AR" else "📊 Compliance & Audit Risk Dashboard")
-    df_clean = standardize_columns(st.session_state.audit_data)
+    df_clean = standardize_columns(st.session_state.get("audit_data", pd.DataFrame()))
     
     if "Standard" in df_clean.columns:
         col_chart1, col_chart2 = st.columns(2)
