@@ -4,8 +4,9 @@ import plotly.express as px
 import numpy as np
 import io
 
-# استدعاء وحدة قاعدة البيانات المحفوظة
+# استدعاء وحدات قاعدة البيانات وموصل الـ ERP الشامل
 from database import init_db, save_journal_data, load_journal_data
+from erp_connector import UniversalERPConnector
 
 # استدعاء مكتبة ReportLab بشكل آمن
 from reportlab.lib.pagesizes import letter
@@ -77,7 +78,7 @@ def run_ias2_check(df):
 
 def run_ias16_check(df, threshold=5000.0):
     findings = []
-    keywords = ['صيانة', 'تطوير', 'تجديد', 'مواصفات', 'Maintenance', 'Repair', 'Upgrade', 'Renovation']
+    keywords = ['صيانة', 'تطوير', 'تجديد', 'مواصفات', 'Maintenance', 'Repair', 'Upgrade', 'Renovation', 'معدات', 'محركات']
     if 'Debit' in df.columns and 'Account' in df.columns:
         for idx, row in df.iterrows():
             account_name = str(row.get('Account', ''))
@@ -206,7 +207,7 @@ def generate_audit_pdf(audit_results_df, user_name="Osama Abbas", user_role="Chi
     return buffer
 
 # ---------------------------------------------------------
-# 5. التهيئة وتسجيل الدخول واسترجاع البيانات المحفوظة
+# 5. التهيئة وتسجيل الدخول
 # ---------------------------------------------------------
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
@@ -241,7 +242,6 @@ if not st.session_state.authenticated:
                     st.session_state.user_name = user_input
                     st.session_state.user_role = role_input
                     
-                    # استرجاع البيانات المحفوظة من قاعدة البيانات للمستخدم
                     db_df = load_journal_data(user_id=user_input)
                     if not db_df.empty:
                         st.session_state.audit_data = db_df
@@ -282,7 +282,7 @@ with st.sidebar:
 TXT = {
     "title": {"EN": "SAEIS - Smart Audit & Intelligence System", "AR": "نظام المراجعة والتدقيق الذكي - SAEIS"},
     "subtitle": {"EN": "Automated IFRS/IAS Compliance & Risk Analytics Engine", "AR": "محرك أتمتة الامتثال لمعايير IFRS/IAS وتحليل المخاطر المحاسبية"},
-    "tab1": {"EN": "📁 Data Ingestion", "AR": "📁 استيراد البيانات"},
+    "tab1": {"EN": "📁 Data Ingestion & Universal ERP Integration", "AR": "📁 استيراد البيانات والربط الشامل مع أنظمة ERP"},
     "tab2": {"EN": "📑 Live Editor & Audit Engine", "AR": "📑 التعديل وفحص المعايير البرمجي"},
     "tab3": {"EN": "📊 Analytics & Risks", "AR": "📊 تحليلات المخاطر والامتثال"},
     "tab4": {"EN": "📚 IFRS Knowledge Base", "AR": "📚 مكتبة المعايير الدولية"}
@@ -306,8 +306,8 @@ tabs = st.tabs([TXT["tab1"][L], TXT["tab2"][L], TXT["tab3"][L], TXT["tab4"][L]])
 
 # --- Tab 1 ---
 with tabs[0]:
-    st.subheader("استيراد ملفات القيود والربط السحابي" if L == "AR" else "Data Upload & ERP Integration")
-    source = st.radio("اختر مصدر البيانات:" if L == "AR" else "Select Source:", ["Excel / CSV File", "ERP API Connection (Odoo / Onyx Pro)"], horizontal=True)
+    st.subheader("استيراد البيانات والربط الشامل مع مختلف أنظمة ERP" if L == "AR" else "Data Upload & Universal ERP API Integration")
+    source = st.radio("اختر مصدر البيانات:" if L == "AR" else "Select Source:", ["Excel / CSV File", "Universal ERP API Connector (Odoo, Onyx Pro, SAP, Oracle, Dynamics, Zoho, Custom)"], horizontal=True)
     
     if source == "Excel / CSV File":
         uploaded_file = st.file_uploader("اختر ملف القيود أو ميزان المراجعة:" if L == "AR" else "Upload Trial Balance or Journal Entries:", type=["xlsx", "xls", "csv"])
@@ -322,21 +322,38 @@ with tabs[0]:
                 st.session_state.audit_data = df_new
                 st.session_state.audit_ran = False
                 
-                # حفظ الملف الجديد مباشرة في قاعدة البيانات
                 save_journal_data(df_new, user_id=st.session_state.get('user_name', 'Osama Abbas'))
                 st.success("تم استيراد الملف وحفظه دائماً في قاعدة البيانات بنجاح!" if L == "AR" else "File imported & persisted successfully!")
             except Exception as e:
                 st.error(f"حدث خطأ أثناء قراءة الملف: {e}")
     else:
-        st.info("🔗 API Live Integration Engine (Odoo & Onyx Pro ERP)")
-        col_api1, col_api2 = st.columns(2)
-        with col_api1:
-            st.text_input("ERP Endpoint URL", value="https://erp.company.com/api/v1/journal")
-            st.text_input("API Key / Token", value="••••••••••••••••", type="password")
-        with col_api2:
-            st.selectbox("Target Fiscal Year", ["2026", "2025"])
-            if st.button("مزامنة البيانات الآن" if L == "AR" else "Sync ERP Data Now", type="primary"):
-                st.success("تمت المزامنة بنجاح من نظام ERP!" if L == "AR" else "Data synced successfully from ERP!")
+        st.info("🌐 Universal ERP API Integration Connector - موصل الربط الشامل لجميع أنظمة ERP")
+        
+        col_erp1, col_erp2 = st.columns(2)
+        with col_erp1:
+            erp_system = st.selectbox(
+                "اختر نظام إدارة الموارد (ERP System):" if L == "AR" else "Select ERP System:",
+                ["Odoo ERP", "Onyx Pro (أونكس برو)", "SAP S/4HANA", "Oracle ERP Cloud", "Microsoft Dynamics 365", "Zoho Books / QuickBooks", "Custom REST API (نظام خاص)"]
+            )
+            endpoint_url = st.text_input("ERP Endpoint URL / رابط الـ API", value=f"https://api.company-erp.com/v1/{erp_system.split()[0].lower()}/journal")
+            
+        with col_erp2:
+            api_key = st.text_input("API Bearer Token / Secret Key", value="••••••••••••••••", type="password")
+            fiscal_year = st.selectbox("السنة المالية المستهدفة / Fiscal Year", ["2026", "2025"])
+
+        if st.button("🚀 مزامنة وسحب البيانات المباشرة الآن" if L == "AR" else "🚀 Sync & Ingest ERP Data Now", type="primary", use_container_width=True):
+            with st.spinner("جاري الاتصال بنظام ERP وتحويل البيانات..." if L == "AR" else "Connecting to ERP API..."):
+                connector = UniversalERPConnector(endpoint_url=endpoint_url, api_key=api_key, system_type=erp_system.split()[0])
+                erp_df = connector.fetch_data()
+                
+                if not erp_df.empty:
+                    st.session_state.audit_data = erp_df
+                    st.session_state.audit_ran = False
+                    save_journal_data(erp_df, user_id=st.session_state.get('user_name', 'Osama Abbas'))
+                    st.success(f"✅ تمت المزامنة بنجاح من نظام [{erp_system}] وحفظ القيود في قاعدة بيانات SAEIS!" if L == "AR" else f"✅ Successfully ingested data from [{erp_system}]!")
+                    st.dataframe(erp_df.head(), use_container_width=True)
+                else:
+                    st.error("تعذر جلب البيانات من نظام ERP المستهدف. تحقق من رابط الـ API والمفتاح." if L == "AR" else "Failed to fetch ERP data.")
 
 # --- Tab 2 ---
 with tabs[1]:
@@ -361,7 +378,6 @@ with tabs[1]:
     with col_act1:
         if st.button("💾 حفظ التغييرات دائمًا" if L == "AR" else "💾 Save Changes Permanently", type="secondary", use_container_width=True):
             st.session_state.audit_data = edited_df
-            # حفظ التعديلات مباشرة في قاعدة البيانات
             save_journal_data(edited_df, user_id=st.session_state.get('user_name', 'Osama Abbas'))
             st.success("تم حفظ التعديلات في قاعدة البيانات دائمًا بنجاح!" if L == "AR" else "Data stored permanently in database!")
             
@@ -403,13 +419,13 @@ with tabs[2]:
     st.subheader("📊 تحليلات المخاطر والامتثال المحاسبي" if L == "AR" else "📊 Compliance & Audit Risk Dashboard")
     df_clean = standardize_columns(st.session_state.get("audit_data", pd.DataFrame()))
     
-    if "Standard" in df_clean.columns:
+    if "Standard" in df_clean.columns or "Account" in df_clean.columns:
         col_chart1, col_chart2 = st.columns(2)
         with col_chart1:
-            fig_status = px.pie(df_clean, names="Standard", title="توزيع البيانات حسب المعيار المحاسبي", color_discrete_sequence=px.colors.qualitative.Set2)
+            fig_status = px.pie(df_clean, names="Account" if "Account" in df_clean.columns else None, title="توزيع البيانات حسب الحسابات المحاسبية", color_discrete_sequence=px.colors.qualitative.Set2)
             st.plotly_chart(fig_status, use_container_width=True)
         with col_chart2:
-            fig_risk = px.bar(df_clean, x="Standard", y="Debit" if "Debit" in df_clean.columns else None, title="حجم المبالغ حسب المعيار", barmode="group")
+            fig_risk = px.bar(df_clean, x="Account" if "Account" in df_clean.columns else None, y="Debit" if "Debit" in df_clean.columns else None, title="حجم المبالغ المدينة حسب الحساب", barmode="group")
             st.plotly_chart(fig_risk, use_container_width=True)
     else:
         st.info("قم بتشغيل محرك الفحص الآلي لعرض الرسوم البيانية وتحليلات المخاطر." if L == "AR" else "Run automated engine to display analytics.")
