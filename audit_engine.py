@@ -1,9 +1,8 @@
 import pandas as pd
 import numpy as np
-import streamlit as st
 
 # ==========================================
-# 1. طبقة تنقية البيانات وعزل أسطر التجميع (Pipeline Layer)
+# 1. طبقة تنقية البيانات وعزل أسطر التجميع (Data Pipeline)
 # ==========================================
 def clean_and_normalize_journal(df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -33,7 +32,7 @@ def clean_and_normalize_journal(df: pd.DataFrame) -> pd.DataFrame:
     # ترشيح الجدول واستبعاد صفوف المجموع
     df_cleaned = df_cleaned[~mask_total].copy()
 
-    # تحويل وإعادة ضبط أعمدة المبالغ المالي إلى قيم رقمية ناصعة (Numeric Pure Values)
+    # تحويل وإعادة ضبط أعمدة المبالغ المالية إلى قيم رقمية (Numeric Pure Values)
     target_numeric_cols = ['Debit', 'Credit', 'Cost', 'NRV', 'المدين', 'الدائن', 'التكلفة', 'صافي القيمة التحصيلية']
     for col in df_cleaned.columns:
         if col in target_numeric_cols or any(k in str(col).lower() for k in ['debit', 'credit', 'amount', 'val']):
@@ -46,104 +45,93 @@ def clean_and_normalize_journal(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # ==========================================
-# 2. طبقة محرك القواعد الحتمية الموحدة (Centralized Audit Engine)
+# 2. فحوصات المعايير الحتمية (Deterministic Standard Rules)
 # ==========================================
-class DeterministicAuditEngine:
-    """
-    طبقة تحقق مركزية موحدة تمنع الترقيع وتضمن تطبيق جميع قواعد IFRS/IAS
-    عبر معايير جودة موحدة وانحرافات محددة بدقة قابلية للتتبع (Traceability).
-    """
-    def __init__(self, df: pd.DataFrame):
-        self.df = clean_and_normalize_journal(df)
-        self.results = []
+def run_ias1_check(df: pd.DataFrame) -> list:
+    """فحص توازن ميزان المراجعة وفق IAS 1"""
+    findings = []
+    total_debit = df['Debit'].sum() if 'Debit' in df.columns else 0.0
+    total_credit = df['Credit'].sum() if 'Credit' in df.columns else 0.0
+    diff = round(abs(total_debit - total_credit), 2)
 
-    def check_ias1_balance(self):
-        """فحص توازن ميزان المراجعة وفق معيار IAS 1 (عرض القوائم المالية)"""
-        total_debit = self.df['Debit'].sum() if 'Debit' in self.df.columns else 0.0
-        total_credit = self.df['Credit'].sum() if 'Credit' in self.df.columns else 0.0
-        diff = round(abs(total_debit - total_credit), 2)
+    if diff > 0.00:
+        findings.append({
+            "Standard": "IAS 1",
+            "Rule_ID": "IAS1-BAL-001",
+            "Severity": "Critical",
+            "Issue_AR": f"اختلال في توازن ميزان المراجعة بمبلغ قدره {diff:,.2f}",
+            "Issue_EN": f"Trial balance imbalance detected: {diff:,.2f}",
+            "Status": "Failed"
+        })
+    return findings
 
-        if diff > 0.00:
-            self.results.append({
-                "Standard": "IAS 1",
-                "Rule_ID": "IAS1-BAL-001",
-                "Severity": "Critical",
-                "Message_AR": f"اختلال في توازن ميزان المراجعة بمبلغ قدره {diff:,.2f}",
-                "Message_EN": f"Trial balance imbalance detected: {diff:,.2f}",
+def run_ias2_check(df: pd.DataFrame) -> list:
+    """فحص تقييم المخزون وصافي القيمة التحصيلية وفق IAS 2"""
+    findings = []
+    if 'Cost' in df.columns and 'NRV' in df.columns:
+        invalid_nrv = df[(df['NRV'] > 0) & (df['NRV'] < df['Cost'])]
+        for idx, row in invalid_nrv.iterrows():
+            findings.append({
+                "Standard": "IAS 2",
+                "Rule_ID": "IAS2-INV-001",
+                "Severity": "High",
+                "Issue_AR": f"المخزون للحساب {row.get('Account', idx)} مسجل بالتكلفة وهي أعلى من صافي القيمة التحصيلية (NRV)",
+                "Issue_EN": f"Inventory cost exceeds NRV for account {row.get('Account', idx)}",
                 "Status": "Failed"
             })
-        else:
-            self.results.append({
-                "Standard": "IAS 1",
-                "Rule_ID": "IAS1-BAL-001",
-                "Severity": "Info",
-                "Message_AR": "ميزان المراجعة متوازن تماماً وفق معيار IAS 1",
-                "Message_EN": "Trial balance is fully balanced according to IAS 1",
-                "Status": "Passed"
-            })
+    return findings
 
-    def run_all_checks(self) -> pd.DataFrame:
-        if self.df.empty:
-            return pd.DataFrame()
-        self.check_ias1_balance()
-        # يمكن إضافة باقي فحوصات IAS 16 و IFRS 16 بنفس الهيكلية الموحدة
-        return pd.DataFrame(self.results)
-
-
-# ==========================================
-# 3. واجهة التفاعل المباشرة للتكامل مع Streamlit Dashboard
-# ==========================================
-def render_interactive_audit_tab(L="AR"):
-    st.subheader("جدول القيود المحاسبية التفاعلي والمراجعة البرمجية الحتمية" if L == "AR" else "Interactive Audit Journal & Deterministic Audit Engine")
-
-    # 1. جلب البيانات من الجلسة
-    raw_df = st.session_state.get("audit_data", pd.DataFrame())
+def run_ifrs16_check(df: pd.DataFrame) -> list:
+    """فحص عقود الإيجار المعالجة كمصروف مباشر وفق IFRS 16"""
+    findings = []
+    keywords = ['إيجار', 'ايجار', 'rent', 'lease']
+    account_col = 'Account' if 'Account' in df.columns else None
     
-    # 2. تنظيف حتمي مبدئي لاستبعاد أي أسطر تجميع مخفية
-    clean_df_initial = clean_and_normalize_journal(raw_df)
+    if account_col:
+        for idx, row in df.iterrows():
+            acc_name = str(row[account_col]).lower()
+            debit_val = row.get('Debit', 0.0)
+            if any(kw in acc_name for kw in keywords) and debit_val > 50000:
+                findings.append({
+                    "Standard": "IFRS 16",
+                    "Rule_ID": "IFRS16-LEA-001",
+                    "Severity": "Medium",
+                    "Issue_AR": f"احتمالية وجود عقد إيجار رأسمالي مسجل كمصروف مباشر للحساب {row[account_col]} بمبلغ {debit_val:,.2f}",
+                    "Issue_EN": f"Potential right-of-use asset misclassified as direct expense: {debit_val:,.2f}",
+                    "Status": "Failed"
+                })
+    return findings
 
-    # 3. عرض جدول التحرير التفاعلي
-    edited_df = st.data_editor(
-        clean_df_initial, 
-        num_rows="dynamic", 
-        use_container_width=True, 
-        key="main_journal_editor"
-    )
 
-    # 4. تنظيف وتحديث حتمي لحظي من واقع ما قام المستخدم بتعديله في الجدول مباشرة
-    final_df = clean_and_normalize_journal(edited_df)
+# ==========================================
+# 3. دالة التنفيذ الرئيسية المربوطة بالواجهة (Core Pipeline Trigger)
+# ==========================================
+def execute_full_audit(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    دالة تشغيل الفحص الكامل - تستقبل البيانات، تنظفها حتمياً، وتطبق المعايير
+    """
+    # 1. التنظيف وعزل أسطر التجميع أولاً
+    clean_df = clean_and_normalize_journal(df)
+    
+    if clean_df.empty:
+        return pd.DataFrame()
 
-    # 5. حساب الإجماليات الحقيقية المزامنة بنسبة 100% مع الجدول المعروض
-    total_debit = final_df['Debit'].sum() if 'Debit' in final_df.columns else 0.0
-    total_credit = final_df['Credit'].sum() if 'Credit' in final_df.columns else 0.0
-    imbalance = round(abs(total_debit - total_credit), 2)
+    all_findings = []
 
-    # 6. عرض البطاقات المربوطة حتمياً بدون أي تضارب
-    col1, col2, col3 = st.columns(3)
-    col1.metric("إجمالي المدين / Total Debit", f"{total_debit:,.2f}")
-    col2.metric("إجمالي الدائن / Total Credit", f"{total_credit:,.2f}")
-    col3.metric(
-        "الفرق / Imbalance", 
-        f"{imbalance:,.2f}", 
-        delta=f"-{imbalance:,.2f}" if imbalance > 0 else "0.00",
-        delta_color="inverse" if imbalance > 0 else "normal"
-    )
+    # 2. تشغيل الفحوصات الحتمية
+    all_findings.extend(run_ias1_check(clean_df))
+    all_findings.extend(run_ias2_check(clean_df))
+    all_findings.extend(run_ifrs16_check(clean_df))
 
-    st.markdown("---")
+    # 3. إرجاع النتائج كـ DataFrame
+    if not all_findings:
+        return pd.DataFrame([{
+            "Standard": "All Standards",
+            "Rule_ID": "CLEAN-PASS",
+            "Severity": "Info",
+            "Issue_AR": "لم يتم رصد أي مخالفات أو اختلالات في البيانات المفحوصة",
+            "Issue_EN": "No compliance issues or imbalances detected",
+            "Status": "Passed"
+        }])
 
-    # 7. أزرار التشغيل والتنفيذ المباشر
-    btn_col1, btn_col2 = st.columns(2)
-    with btn_col1:
-        if st.button("💾 حفظ البيانات الحالية", type="secondary", use_container_width=True):
-            st.session_state.audit_data = final_df
-            st.success("تم تحديث وحفظ البيانات المنقاة بنجاح!")
-            st.rerun()
-
-    with btn_col2:
-        if st.button("⚡ تشغيل محرك التدقيق الحتمي", type="primary", use_container_width=True):
-            st.session_state.audit_data = final_df
-            engine = DeterministicAuditEngine(final_df)
-            audit_results = engine.run_all_checks()
-            st.session_state.audit_results = audit_results
-            st.session_state.audit_ran = True
-            st.success("تم تنفيذ الفحص الحتمي بنجاح!")
+    return pd.DataFrame(all_findings)
