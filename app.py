@@ -40,19 +40,32 @@ def render_saeis_logo(width=100):
     )
 
 # ---------------------------------------------------------
-# 2. توحيد المسميات والبيانات المحاسبية
+# 2. توحيد المسميات الذكي للبيانات المحاسبية وموازين المراجعة
 # ---------------------------------------------------------
 def standardize_columns(df):
+    df = df.dropna(how='all').dropna(axis=1, how='all')
+    
+    # التعرف الآلي على صف العناوين الهيدر إذا كان يحتوي على أسطر تعريفية
+    if any('Unnamed' in str(col) for col in df.columns):
+        for idx, row in df.iterrows():
+            row_str = " ".join([str(val) for val in row.values])
+            if 'اسم الحساب' in row_str or 'الحساب' in row_str or 'مدين' in row_str or 'Account' in row_str or 'رقم الحساب' in row_str:
+                df.columns = df.iloc[idx]
+                df = df.iloc[idx+1:].reset_index(drop=True)
+                break
+
     mapping = {
         'اسم الحساب': 'Account', 'الحساب': 'Account', 'البيان': 'Account', 'اسم_الحساب': 'Account', 'Account Name': 'Account',
-        'مدين': 'Debit', 'المدين': 'Debit', 'مبلغ مدين': 'Debit',
-        'دائن': 'Credit', 'الدائن': 'Credit', 'مبلغ دائن': 'Credit',
-        'التكلفة': 'Cost', 'تكلفة المخزون': 'Cost',
-        'صافي القيمة القابلة للتحقق': 'NRV', 'القيمة القابلة للتحقق': 'NRV', 'NRV Value': 'NRV',
-        'أيام التأخير': 'Days_Overdue', 'عمر الدين': 'Days_Overdue', 'تأخير': 'Days_Overdue', 'Days': 'Days_Overdue'
+        'مدين': 'Debit', 'المدين': 'Debit', 'مبلغ مدين': 'Debit', 'Debit': 'Debit',
+        'دائن': 'Credit', 'الدائن': 'Credit', 'مبلغ دائن': 'Credit', 'Credit': 'Credit',
+        'التكلفة': 'Cost', 'تكلفة المخزون': 'Cost', 'Cost': 'Cost',
+        'صافي القيمة القابلة للتحقق': 'NRV', 'القيمة القابلة للتحقق': 'NRV', 'NRV Value': 'NRV', 'NRV': 'NRV',
+        'أيام التأخير': 'Days_Overdue', 'عمر الدين': 'Days_Overdue', 'تأخير': 'Days_Overdue', 'Days_Overdue': 'Days_Overdue',
+        'رقم القيد': 'Entry_ID', 'رقم الحساب': 'Entry_ID', 'Entry_ID': 'Entry_ID'
     }
+    
     renamed_df = df.rename(columns=mapping)
-    renamed_df = renamed_df.loc[:, ~renamed_df.columns.str.contains('^Unnamed')]
+    renamed_df = renamed_df.loc[:, ~renamed_df.columns.astype(str).str.contains('^Unnamed')]
     return renamed_df
 
 def create_sample_excel_bytes():
@@ -71,10 +84,10 @@ def create_sample_excel_bytes():
     return output
 
 # ---------------------------------------------------------
-# 3. محرك التدقيق والتحقق الآلي المحسّن (Enterprise Audit Engine)
+# 3. محرك التدقيق المحسّن (Enterprise Audit Engine)
 # ---------------------------------------------------------
 
-# (1) فحص عدم التوازن على مستوى القيد الفردي
+# فحص عدم التوازن على مستوى القيد الفردي
 def run_entry_balance_check(df):
     findings = []
     if 'Entry_ID' in df.columns and 'Debit' in df.columns and 'Credit' in df.columns:
@@ -86,7 +99,7 @@ def run_entry_balance_check(df):
             if diff > 0.01:
                 findings.append({
                     "Row_ID": entry_id,
-                    "Item": f"قيد رقم {entry_id}",
+                    "Item": f"قيد/حساب رقم {entry_id}",
                     "Standard": "General Ledger Integrity",
                     "Issue": f"عدم توازن في القيد الفردي ({entry_id}). إجمالي المدين: {debit_sum:,.2f} | إجمالي الدائن: {credit_sum:,.2f} | الفرق: {diff:,.2f}",
                     "Risk_Level": "High",
@@ -133,7 +146,6 @@ def run_ias16_check(df, threshold=5000.0):
                 })
     return pd.DataFrame(findings)
 
-# (2) فلترة ذكية لحسابات الذمم فقط لمعيار IFRS 9
 def run_ifrs9_check(df):
     findings = []
     receivable_keywords = ['ذمم', 'عملاء', 'عميل', 'مدينة', 'مدينين', 'Receivable', 'Customer', 'Debtor']
@@ -151,7 +163,6 @@ def run_ifrs9_check(df):
             days = pd.to_numeric(row.get('Days_Overdue'), errors='coerce')
             amount = pd.to_numeric(row.get('Debit'), errors='coerce')
             
-            # التأكد من أن الحساب ينتمي للذمم أو العملاء قبل فحص أيام التأخير
             is_receivable_account = any(kw.lower() in account_name.lower() for kw in receivable_keywords)
             
             if is_receivable_account and pd.notnull(days) and pd.notnull(amount) and days > 30 and amount > 0:
@@ -386,12 +397,12 @@ with tabs[0]:
                 else:
                     df_new = pd.read_excel(uploaded_file)
                 
-                df_new = df_new.dropna(how='all').dropna(axis=1, how='all')
+                df_new = standardize_columns(df_new)
                 st.session_state.audit_data = df_new
                 st.session_state.audit_ran = False
                 
                 save_journal_data(df_new, user_id=st.session_state.get('user_name', 'Osama Abbas'))
-                st.success("تم استيراد الملف وحفظه دائماً في قاعدة البيانات بنجاح!" if L == "AR" else "File imported & persisted successfully!")
+                st.success("تم استيراد الملف وتوحيد مسميات الأعمدة دائماً بنجاح!" if L == "AR" else "File imported & persisted successfully!")
             except Exception as e:
                 st.error(f"حدث خطأ أثناء قراءة الملف: {e}")
     else:
@@ -440,7 +451,7 @@ with tabs[1]:
         m2.metric("إجمالي الدائن / Total Credit", f"{total_credit:,.2f}")
         m3.metric("الفرق / Imbalance", f"{diff:,.2f}", delta_color="inverse" if diff != 0 else "normal")
     
-    edited_df = st.data_editor(df, num_rows="dynamic", use_container_width=True)
+    edited_df = st.data_editor(df_check, num_rows="dynamic", use_container_width=True)
     
     col_act1, col_act2 = st.columns(2)
     with col_act1:
@@ -485,7 +496,7 @@ with tabs[1]:
             use_container_width=True
         )
 
-# --- Tab 3 (المخططات الموزونة حسب القيمة المالية) ---
+# --- Tab 3 ---
 with tabs[2]:
     st.subheader("📊 تحليلات المخاطر والامتثال المحاسبي (الموزونة مالياً)" if L == "AR" else "📊 Compliance & Weighted Risk Dashboard")
     df_clean = standardize_columns(st.session_state.get("audit_data", pd.DataFrame()))
@@ -493,7 +504,6 @@ with tabs[2]:
     if "Account" in df_clean.columns and "Debit" in df_clean.columns:
         col_chart1, col_chart2 = st.columns(2)
         with col_chart1:
-            # (3) المخطط الدائري الموزون مالياً % بناءً على مبالغ Debit وليس عدد القيود
             df_clean['Debit_Num'] = pd.to_numeric(df_clean['Debit'], errors='coerce').fillna(0)
             fig_status = px.pie(
                 df_clean, 
