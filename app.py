@@ -3,6 +3,7 @@ import pandas as pd
 import plotly.express as px
 import numpy as np
 import io
+import re
 
 # استدعاء وحدات قاعدة البيانات وموصل الـ ERP الشامل
 from database import init_db, save_journal_data, load_journal_data
@@ -29,27 +30,30 @@ st.set_page_config(
 )
 
 SAEIS_LOGO_B64 = """
-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
+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
 """
 
 def render_saeis_logo(width=100):
     clean_b64 = "".join(SAEIS_LOGO_B64.split())
     st.markdown(
-        f'<div style="text-align: center;"><img src="data:image/png;base64="{clean_b64}" width="{width}px" style="border-radius:10px;"></div>',
+        f'<div style="text-align: center;"><img src="data:image/png;base64,{clean_b64}" width="{width}px" style="border-radius:10px;"></div>',
         unsafe_allow_html=True
     )
 
 # ---------------------------------------------------------
-# 2. تنظيف وتعديل البيانات وحل مشكلة التراكم الذاتي (Self-Referential Bug)
+# 2. التصفية المعيارية والحتمية للبيانات (Pure Deterministic Cleaning Engine)
 # ---------------------------------------------------------
-def clean_df_for_streamlit(df):
-    """تنظيف شامل وتجاهل أسطر الإجماليات والفرق لمنع تضخيم الأرقام والتكرار الذاتي"""
-    if df.empty:
-        return df
+def clean_df_pure_deterministic(df):
+    """
+    دالة حتمية 100%: تضمن أن نفس المدخلات تُنتج نفس المخرجات بالضبط في كل إعادة تحميل للصفحة.
+    تستبعد تماماً أسطر الإجمالي، الفروقات، والمجاميع المشتقة لتنظيف المصفوفة من مصدرها.
+    """
+    if df is None or df.empty:
+        return pd.DataFrame(columns=['Entry_ID', 'Account', 'Debit', 'Credit', 'Cost', 'NRV', 'Days_Overdue'])
     
     df_clean = df.copy()
     
-    # البحث عن الهيدر الحقيقي وتجاوز الأسطر التعريفية
+    # البحث عن هيدر الجدول الحقيقي واستبعاد الصفوف التوصيفية العليا
     if any('Unnamed' in str(col) for col in df_clean.columns):
         for idx, row in df_clean.iterrows():
             row_str = " ".join([str(val) for val in row.values])
@@ -71,27 +75,30 @@ def clean_df_for_streamlit(df):
     df_clean = df_clean.rename(columns=mapping)
     df_clean = df_clean.loc[:, ~df_clean.columns.astype(str).str.contains('^Unnamed')]
     
-    # تحويل الأرقام إلى قيم عددية
+    # ضمان وجود الأعمدة الأساسية
+    required_cols = ['Entry_ID', 'Account', 'Debit', 'Credit', 'Cost', 'NRV', 'Days_Overdue']
+    for c in required_cols:
+        if c not in df_clean.columns:
+            df_clean[c] = 0.0 if c in ['Debit', 'Credit', 'Cost', 'NRV', 'Days_Overdue'] else ""
+
+    # تحويل القيم العددية
     num_cols = ['Debit', 'Credit', 'Cost', 'NRV', 'Days_Overdue']
     for col in num_cols:
-        if col in df_clean.columns:
-            df_clean[col] = pd.to_numeric(df_clean[col], errors='coerce').fillna(0.0)
+        df_clean[col] = pd.to_numeric(df_clean[col], errors='coerce').fillna(0.0)
             
     str_cols = ['Account', 'Entry_ID']
     for col in str_cols:
-        if col in df_clean.columns:
-            df_clean[col] = df_clean[col].astype(str).replace('nan', '')
+        df_clean[col] = df_clean[col].astype(str).replace('nan', '').str.strip()
 
-    # 🚨 حل حاسم للسبب الجذري: استبعاد أسطر الإجمالي والفرق المشتقة لتفادي حلقة التجميع الذاتية (Self-Referential Sum)
-    exclude_keywords = ['إجمالي', 'اجمالي', 'المجموع', 'Total', 'TOTAL', 'Sum', 'SUM', 'الفرق', 'Difference', 'Imbalance']
-    if 'Account' in df_clean.columns:
-        pattern = '|'.join(exclude_keywords)
-        df_clean = df_clean[~df_clean['Account'].astype(str).str.contains(pattern, case=False, na=False)]
+    # 🚨 حظر حتمي مطلق لأسطر الإجمالي والفرق والمجاميع لتفادي ظاهرة (Non-Deterministic Rendering)
+    exclude_regex = r'(إجمالي|اجمالي|المجموع|الفرق|توازن|Total|TOTAL|Sum|SUM|Difference|Imbalance|Balance)'
+    df_clean = df_clean[~df_clean['Account'].astype(str).str.contains(exclude_regex, case=False, na=False, regex=True)]
+    df_clean = df_clean[~df_clean['Entry_ID'].astype(str).str.contains(exclude_regex, case=False, na=False, regex=True)]
+
+    # تصفية الصفوف الخالية تماماً
+    df_clean = df_clean[(df_clean['Debit'] > 0) | (df_clean['Credit'] > 0) | (df_clean['Account'] != "")]
 
     return df_clean.reset_index(drop=True)
-
-def standardize_columns(df):
-    return clean_df_for_streamlit(df)
 
 def create_sample_excel_bytes():
     data = [
@@ -112,11 +119,10 @@ def create_sample_excel_bytes():
     return output
 
 # ---------------------------------------------------------
-# 3. محرك التدقيق الذكي وتوليد القيود المحاسبية الصحيحة
+# 3. محرك التدقيق الذكي وتوليد القيود المحاسبية الصحيحة والدقيقة
 # ---------------------------------------------------------
 
 def run_entry_balance_check(df):
-    """فحص توازن القيود: يُطبق فقط على قيود اليومية ذات الأطراف المترابطة"""
     findings = []
     if 'Entry_ID' in df.columns and 'Debit' in df.columns and 'Credit' in df.columns:
         is_journal_entries = df['Entry_ID'].duplicated().any()
@@ -124,6 +130,8 @@ def run_entry_balance_check(df):
         if is_journal_entries:
             grouped = df.groupby('Entry_ID')
             for entry_id, group in grouped:
+                if not entry_id:
+                    continue
                 debit_sum = pd.to_numeric(group['Debit'], errors='coerce').sum()
                 credit_sum = pd.to_numeric(group['Credit'], errors='coerce').sum()
                 diff = abs(debit_sum - credit_sum)
@@ -160,21 +168,26 @@ def run_ias2_check(df):
     return pd.DataFrame(findings)
 
 def run_ias16_check(df, threshold=5000.0):
-    """تصحيح قيد IAS 16: إقفال المصروف الأصلي وإثبات الأصل الثابت بدلاً من قيد صفري نفس الحساب"""
+    """
+    تصحيح قيد IAS 16 الجذري: إقفال المصروف الأصلي بالاسم الصريح الدقيق في الطرف الدائن
+    بدلاً من القيد المموه أو القيد مع نفس اسم الحساب.
+    """
     findings = []
     keywords = ['صيانة', 'تطوير', 'تجديد', 'مواصفات', 'Maintenance', 'Repair', 'Upgrade', 'Renovation', 'معدات', 'محركات']
     if 'Debit' in df.columns and 'Account' in df.columns:
         for idx, row in df.iterrows():
-            account_name = str(row.get('Account', ''))
+            account_name = str(row.get('Account', '')).strip()
             debit_val = pd.to_numeric(row.get('Debit'), errors='coerce')
+            
+            # التأكد من أن الحساب هو مصروف صيانة/تطوير تجاوز حد الرسملة
             if pd.notnull(debit_val) and any(kw.lower() in account_name.lower() for kw in keywords) and debit_val >= threshold:
                 findings.append({
                     "Row_ID": idx,
                     "Item": account_name,
                     "Standard": "IAS 16",
-                    "Issue": f"Expense [{account_name}] of {debit_val:,.2f} exceeds capitalization threshold ({threshold:,.2f}). Requires PPE Capitalization.",
+                    "Issue": f"Capitalizable expenditure charged as operational expense [{account_name}] of {debit_val:,.2f} (Exceeds Threshold {threshold:,.2f}).",
                     "Risk_Level": "Medium",
-                    "Adjusting_Entry": f"Dr. Property, Plant & Equipment (PPE) / الأصول الثابتة {debit_val:,.2f} | Cr. {account_name} / إقفال حساب المصروف الأصلي {debit_val:,.2f}",
+                    "Adjusting_Entry": f"Dr. Property, Plant & Equipment (PPE) / أصول ثابتة (ممتلكات ومعدات) {debit_val:,.2f} | Cr. {account_name} / إقفال وعكس مصروف {account_name} {debit_val:,.2f}",
                     "Engine_Source": "Rule-Based Deterministic Engine (IFRS Standard Code: IAS 16.12)"
                 })
     return pd.DataFrame(findings)
@@ -192,7 +205,7 @@ def run_ifrs9_check(df):
 
     if 'Days_Overdue' in df.columns and 'Debit' in df.columns and 'Account' in df.columns:
         for idx, row in df.iterrows():
-            account_name = str(row.get('Account', ''))
+            account_name = str(row.get('Account', '')).strip()
             days = pd.to_numeric(row.get('Days_Overdue'), errors='coerce')
             amount = pd.to_numeric(row.get('Debit'), errors='coerce')
             
@@ -213,12 +226,12 @@ def run_ifrs9_check(df):
     return pd.DataFrame(findings)
 
 def run_ifrs16_check(df):
-    """تصحيح قيد IFRS 16: احتساب المبالغ الفعلية بدقة وتجنب القوالب المفرغة"""
+    """تصحيح قيد IFRS 16: إثبات أصول حق الاستخدام والالتزام الدقيق وعكس مصروف الإيجار المباشر"""
     findings = []
     keywords = ['إيجار', 'ايجار', 'إيجارات', 'Lease', 'Rent']
     if 'Account' in df.columns and 'Debit' in df.columns:
         for idx, row in df.iterrows():
-            account_name = str(row.get('Account', ''))
+            account_name = str(row.get('Account', '')).strip()
             debit_val = pd.to_numeric(row.get('Debit'), errors='coerce')
             if pd.notnull(debit_val) and any(kw.lower() in account_name.lower() for kw in keywords) and debit_val > 10000:
                 findings.append({
@@ -233,7 +246,7 @@ def run_ifrs16_check(df):
     return pd.DataFrame(findings)
 
 def execute_full_audit(df):
-    df_clean = clean_df_for_streamlit(df)
+    df_clean = clean_df_pure_deterministic(df)
     results_balance = run_entry_balance_check(df_clean)
     results_ias2 = run_ias2_check(df_clean)
     results_ias16 = run_ias16_check(df_clean)
@@ -340,7 +353,7 @@ if not st.session_state.authenticated:
                     
                     db_df = load_journal_data(user_id=user_input)
                     if not db_df.empty:
-                        st.session_state.audit_data = clean_df_for_streamlit(db_df)
+                        st.session_state.audit_data = clean_df_pure_deterministic(db_df)
                     else:
                         default_data = pd.DataFrame([
                             {"Entry_ID": "JE-101", "Account": "صيانة مباني وإصلاحات", "Debit": 15000.0, "Credit": 0.0, "Cost": 0.0, "NRV": 0.0, "Days_Overdue": 0},
@@ -352,7 +365,7 @@ if not st.session_state.authenticated:
                             {"Entry_ID": "JE-104", "Account": "إيجار مقرات وفروع", "Debit": 24000.0, "Credit": 0.0, "Cost": 0.0, "NRV": 0.0, "Days_Overdue": 0},
                             {"Entry_ID": "JE-104", "Account": "النقدية والبنك", "Debit": 0.0, "Credit": 24000.0, "Cost": 0.0, "NRV": 0.0, "Days_Overdue": 0}
                         ])
-                        st.session_state.audit_data = clean_df_for_streamlit(default_data)
+                        st.session_state.audit_data = clean_df_pure_deterministic(default_data)
                         save_journal_data(default_data, user_id=user_input)
 
                     st.success("Access Granted! / تم تسجيل الدخول واسترجاع البيانات المحفوظة بنجاح")
@@ -380,7 +393,7 @@ with st.sidebar:
 
 TXT = {
     "title": {"EN": "SAEIS - Smart Audit & Intelligence System", "AR": "نظام المراجعة والتدقيق الذكي - SAEIS"},
-    "subtitle": {"EN": "Automated IFRS/IAS Compliance & Risk Analytics Engine", "AR": "محرك أتمتة الامتثال لمعايير IFRS/IAS وتحليل المخاطر المحاسبية"},
+    "subtitle": {"EN": "Automated IFRS/IAS Compliance & Deterministic Audit Engine", "AR": "محرك أتمتة الامتثال الحتمي لمعايير IFRS/IAS وتحليل المخاطر المحاسبية"},
     "tab1": {"EN": "📁 Data Ingestion & Universal ERP Integration", "AR": "📁 استيراد البيانات والربط الشامل مع أنظمة ERP"},
     "tab2": {"EN": "📑 Live Editor & Audit Engine", "AR": "📑 التعديل وفحص المعايير البرمجي"},
     "tab3": {"EN": "📊 Analytics & Risks", "AR": "📊 تحليلات المخاطر والامتثال"},
@@ -434,12 +447,12 @@ with tabs[0]:
                 else:
                     df_new = pd.read_excel(uploaded_file)
                 
-                df_clean_new = clean_df_for_streamlit(df_new)
+                df_clean_new = clean_df_pure_deterministic(df_new)
                 st.session_state.audit_data = df_clean_new
                 st.session_state.audit_ran = False
                 
                 save_journal_data(df_clean_new, user_id=st.session_state.get('user_name', 'Osama Abbas'))
-                st.success("تم استيراد الملف واستبعاد أسطر المجاميع والفرق المكررة بنجاح!" if L == "AR" else "File imported & cleaned successfully!")
+                st.success("تم استيراد الملف وتنظيفه بشكل حتمي مع استبعاد كافة أسطر المجاميع والفرق بنجاح!" if L == "AR" else "File imported & deterministically cleaned!")
             except Exception as e:
                 st.error(f"حدث خطأ أثناء قراءة الملف: {e}")
     else:
@@ -463,7 +476,7 @@ with tabs[0]:
                 erp_df = connector.fetch_data()
                 
                 if not erp_df.empty:
-                    erp_clean = clean_df_for_streamlit(erp_df)
+                    erp_clean = clean_df_pure_deterministic(erp_df)
                     st.session_state.audit_data = erp_clean
                     st.session_state.audit_ran = False
                     save_journal_data(erp_clean, user_id=st.session_state.get('user_name', 'Osama Abbas'))
@@ -474,34 +487,35 @@ with tabs[0]:
 
 # --- Tab 2 ---
 with tabs[1]:
-    st.subheader("جدول القيود المحاسبية التفاعلي والمراجعة البرمجية" if L == "AR" else "Interactive Audit Journal & Automated Rules Verification")
+    st.subheader("جدول القيود المحاسبية التفاعلي والمراجعة البرمجية الحتمية" if L == "AR" else "Interactive Audit Journal & Deterministic Rules Verification")
     
-    df = st.session_state.get("audit_data", pd.DataFrame())
-    df_check = clean_df_for_streamlit(df)
+    # جلب البيانات وتمريرها على الدالة الحتمية لمنع أي تكرار أو تغيير أثناء الـ Rerun
+    raw_df = st.session_state.get("audit_data", pd.DataFrame())
+    df_check = clean_df_pure_deterministic(raw_df)
     
-    if "Debit" in df_check.columns and "Credit" in df_check.columns:
-        total_debit = pd.to_numeric(df_check["Debit"], errors='coerce').sum()
-        total_credit = pd.to_numeric(df_check["Credit"], errors='coerce').sum()
-        diff = total_debit - total_credit
-        
-        m1, m2, m3 = st.columns(3)
-        m1.metric("إجمالي المدين / Total Debit", f"{total_debit:,.2f}")
-        m2.metric("إجمالي الدائن / Total Credit", f"{total_credit:,.2f}")
-        m3.metric("الفرق / Imbalance", f"{diff:,.2f}", delta_color="inverse" if diff != 0 else "normal")
+    total_debit = df_check["Debit"].sum()
+    total_credit = df_check["Credit"].sum()
+    diff = total_debit - total_credit
     
-    edited_df = st.data_editor(df_check, num_rows="dynamic", use_container_width=True)
+    m1, m2, m3 = st.columns(3)
+    m1.metric("إجمالي المدين / Total Debit", f"{total_debit:,.2f}")
+    m2.metric("إجمالي الدائن / Total Credit", f"{total_credit:,.2f}")
+    m3.metric("الفرق / Imbalance", f"{diff:,.2f}", delta_color="inverse" if diff != 0 else "normal")
+    
+    edited_df = st.data_editor(df_check, num_rows="dynamic", use_container_width=True, key="journal_editor")
     
     col_act1, col_act2 = st.columns(2)
     with col_act1:
         if st.button("💾 حفظ التغييرات دائمًا" if L == "AR" else "💾 Save Changes Permanently", type="secondary", use_container_width=True):
-            cleaned_edited = clean_df_for_streamlit(edited_df)
+            cleaned_edited = clean_df_pure_deterministic(edited_df)
             st.session_state.audit_data = cleaned_edited
             save_journal_data(cleaned_edited, user_id=st.session_state.get('user_name', 'Osama Abbas'))
             st.success("تم حفظ التعديلات في قاعدة البيانات دائمًا بنجاح!" if L == "AR" else "Data stored permanently in database!")
+            st.rerun()
             
     with col_act2:
-        if st.button("⚡ تشغيل محرك الفحص الآلي" if L == "AR" else "⚡ Run Audit Engine", type="primary", use_container_width=True):
-            cleaned_edited = clean_df_for_streamlit(edited_df)
+        if st.button("⚡ تشغيل محرك الفحص الآلي الحتمي" if L == "AR" else "⚡ Run Deterministic Audit Engine", type="primary", use_container_width=True):
+            cleaned_edited = clean_df_pure_deterministic(edited_df)
             st.session_state.audit_data = cleaned_edited
             results = execute_full_audit(cleaned_edited)
             st.session_state.audit_results = results
@@ -538,24 +552,17 @@ with tabs[1]:
 
 # --- Tab 3 ---
 with tabs[2]:
-    st.subheader("📊 تحليلات المخاطر والامتثال المحاسبي (الموزونة مالياً)" if L == "AR" else "📊 Compliance & Weighted Risk Dashboard")
-    df_clean = clean_df_for_streamlit(st.session_state.get("audit_data", pd.DataFrame()))
+    st.subheader("📊 تحليلات المخاطر والامتثال المحاسبي (الحتمية)" if L == "AR" else "📊 Deterministic Compliance & Weighted Risk Dashboard")
+    df_chart = clean_df_pure_deterministic(st.session_state.get("audit_data", pd.DataFrame()))
     
-    if "Account" in df_clean.columns and "Debit" in df_clean.columns:
+    if not df_chart.empty and "Account" in df_chart.columns and "Debit" in df_chart.columns:
         col_chart1, col_chart2 = st.columns(2)
         with col_chart1:
-            df_clean['Debit_Num'] = pd.to_numeric(df_clean['Debit'], errors='coerce').fillna(0)
-            
-            # استبعاد أسطر الإجمالي والفرق من الرسم البياني
-            exclude_keywords = ['إجمالي', 'اجمالي', 'المجموع', 'Total', 'TOTAL', 'Sum', 'SUM', 'الفرق', 'Difference', 'Imbalance']
-            pattern = '|'.join(exclude_keywords)
-            df_chart = df_clean[~df_clean['Account'].astype(str).str.contains(pattern, case=False, na=False)]
-            
             fig_status = px.pie(
                 df_chart, 
-                values="Debit_Num", 
+                values="Debit", 
                 names="Account", 
-                title="توزيع التركز المالي للحسابات (استبعاد الإجماليات والفرق) %",
+                title="توزيع التركز المالي للحسابات (مفلتر حتمياً دون إجماليات) %",
                 color_discrete_sequence=px.colors.qualitative.Set2
             )
             st.plotly_chart(fig_status, use_container_width=True)
@@ -564,14 +571,14 @@ with tabs[2]:
             fig_risk = px.bar(
                 df_chart, 
                 x="Account", 
-                y="Debit_Num", 
-                title="حجم المبالغ المدينة لكل حساب (بالقيمة)",
+                y="Debit", 
+                title="حجم المبالغ المدينة لكل حساب (بالقيمة الحقيقية)",
                 color="Account",
                 barmode="group"
             )
             st.plotly_chart(fig_risk, use_container_width=True)
     else:
-        st.info("قم بتشغيل محرك الفحص الآلي لعرض الرسوم البيانية وتحليلات المخاطر." if L == "AR" else "Run automated engine to display analytics.")
+        st.info("قم بتشغيل محرك الفحص الآلي أو رفع بيانات لعرض الرسوم البيانية وتحليلات المخاطر." if L == "AR" else "Run automated engine to display analytics.")
 
 # --- Tab 4 ---
 with tabs[3]:
