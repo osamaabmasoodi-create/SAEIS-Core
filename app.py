@@ -55,7 +55,6 @@ def standardize_columns(df):
     renamed_df = renamed_df.loc[:, ~renamed_df.columns.str.contains('^Unnamed')]
     return renamed_df
 
-# توليد ملف إكسل نموذجي للاختبار
 def create_sample_excel_bytes():
     data = [
         {"Entry_ID": "JE-201", "Account": "صيانة وتطوير محركات خط الإنتاج", "Debit": 18500.0, "Credit": 0.0, "Cost": 0.0, "NRV": 0.0, "Days_Overdue": 0},
@@ -72,8 +71,30 @@ def create_sample_excel_bytes():
     return output
 
 # ---------------------------------------------------------
-# 3. محرك التدقيق والتحقق الآلي (IFRS/IAS Engine)
+# 3. محرك التدقيق والتحقق الآلي المحسّن (Enterprise Audit Engine)
 # ---------------------------------------------------------
+
+# (1) فحص عدم التوازن على مستوى القيد الفردي
+def run_entry_balance_check(df):
+    findings = []
+    if 'Entry_ID' in df.columns and 'Debit' in df.columns and 'Credit' in df.columns:
+        grouped = df.groupby('Entry_ID')
+        for entry_id, group in grouped:
+            debit_sum = pd.to_numeric(group['Debit'], errors='coerce').sum()
+            credit_sum = pd.to_numeric(group['Credit'], errors='coerce').sum()
+            diff = abs(debit_sum - credit_sum)
+            if diff > 0.01:
+                findings.append({
+                    "Row_ID": entry_id,
+                    "Item": f"قيد رقم {entry_id}",
+                    "Standard": "General Ledger Integrity",
+                    "Issue": f"عدم توازن في القيد الفردي ({entry_id}). إجمالي المدين: {debit_sum:,.2f} | إجمالي الدائن: {credit_sum:,.2f} | الفرق: {diff:,.2f}",
+                    "Risk_Level": "High",
+                    "Adjusting_Entry": f"يتطلب مراجعة أطراف القيد {entry_id} وإدخال الطرف الدائن/المدين المفقود بمبلغ {diff:,.2f}",
+                    "Engine_Source": "Rule-Based Deterministic Engine (Double-Entry Bookkeeping Rule)"
+                })
+    return pd.DataFrame(findings)
+
 def run_ias2_check(df):
     findings = []
     if 'Cost' in df.columns and 'NRV' in df.columns:
@@ -88,7 +109,8 @@ def run_ias2_check(df):
                     "Standard": "IAS 2",
                     "Issue": f"Inventory valued above NRV. Impairment loss: {impairment:,.2f}",
                     "Risk_Level": "High",
-                    "Adjusting_Entry": f"Dr. Inventory Impairment Loss {impairment:,.2f} | Cr. Allowance for Inventory NRV {impairment:,.2f}"
+                    "Adjusting_Entry": f"Dr. Inventory Impairment Loss {impairment:,.2f} | Cr. Allowance for Inventory NRV {impairment:,.2f}",
+                    "Engine_Source": "Rule-Based Deterministic Engine (IFRS Standard Code: IAS 2.09)"
                 })
     return pd.DataFrame(findings)
 
@@ -106,12 +128,16 @@ def run_ias16_check(df, threshold=5000.0):
                     "Standard": "IAS 16",
                     "Issue": f"Expense exceeds capitalization threshold ({threshold:,.2f}). Should be capitalized as PPE.",
                     "Risk_Level": "Medium",
-                    "Adjusting_Entry": f"Dr. Property, Plant & Equipment (PPE) {debit_val:,.2f} | Cr. {account_name} {debit_val:,.2f}"
+                    "Adjusting_Entry": f"Dr. Property, Plant & Equipment (PPE) {debit_val:,.2f} | Cr. {account_name} {debit_val:,.2f}",
+                    "Engine_Source": "Rule-Based Deterministic Engine (IFRS Standard Code: IAS 16.12)"
                 })
     return pd.DataFrame(findings)
 
+# (2) فلترة ذكية لحسابات الذمم فقط لمعيار IFRS 9
 def run_ifrs9_check(df):
     findings = []
+    receivable_keywords = ['ذمم', 'عملاء', 'عميل', 'مدينة', 'مدينين', 'Receivable', 'Customer', 'Debtor']
+    
     def get_ecl_rate(days):
         if days <= 30: return 0.01
         elif days <= 60: return 0.05
@@ -119,20 +145,26 @@ def run_ifrs9_check(df):
         elif days <= 180: return 0.35
         else: return 0.75
 
-    if 'Days_Overdue' in df.columns and 'Debit' in df.columns:
+    if 'Days_Overdue' in df.columns and 'Debit' in df.columns and 'Account' in df.columns:
         for idx, row in df.iterrows():
+            account_name = str(row.get('Account', ''))
             days = pd.to_numeric(row.get('Days_Overdue'), errors='coerce')
             amount = pd.to_numeric(row.get('Debit'), errors='coerce')
-            if pd.notnull(days) and pd.notnull(amount) and days > 30 and amount > 0:
+            
+            # التأكد من أن الحساب ينتمي للذمم أو العملاء قبل فحص أيام التأخير
+            is_receivable_account = any(kw.lower() in account_name.lower() for kw in receivable_keywords)
+            
+            if is_receivable_account and pd.notnull(days) and pd.notnull(amount) and days > 30 and amount > 0:
                 rate = get_ecl_rate(days)
                 required_provision = amount * rate
                 findings.append({
                     "Row_ID": idx,
-                    "Item": str(row.get('Account', f"Row {idx}")),
+                    "Item": account_name,
                     "Standard": "IFRS 9",
                     "Issue": f"Overdue receivable ({days:.0f} days). Estimated ECL rate: {rate*100:.0f}%. Provision needed: {required_provision:,.2f}",
                     "Risk_Level": "High" if days > 90 else "Medium",
-                    "Adjusting_Entry": f"Dr. ECL Impairment Expense {required_provision:,.2f} | Cr. Allowance for ECL {required_provision:,.2f}"
+                    "Adjusting_Entry": f"Dr. ECL Impairment Expense {required_provision:,.2f} | Cr. Allowance for ECL {required_provision:,.2f}",
+                    "Engine_Source": "Rule-Based Deterministic Engine (IFRS Standard Code: IFRS 9.5.5)"
                 })
     return pd.DataFrame(findings)
 
@@ -150,18 +182,20 @@ def run_ifrs16_check(df):
                     "Standard": "IFRS 16",
                     "Issue": f"Lease payment expensed directly ({debit_val:,.2f}). Requires ROU Asset & Lease Liability recognition.",
                     "Risk_Level": "High",
-                    "Adjusting_Entry": "Dr. Right of Use (ROU) Asset | Cr. Lease Liability"
+                    "Adjusting_Entry": "Dr. Right of Use (ROU) Asset | Cr. Lease Liability",
+                    "Engine_Source": "Rule-Based Deterministic Engine (IFRS Standard Code: IFRS 16.22)"
                 })
     return pd.DataFrame(findings)
 
 def execute_full_audit(df):
     df_clean = standardize_columns(df)
+    results_balance = run_entry_balance_check(df_clean)
     results_ias2 = run_ias2_check(df_clean)
     results_ias16 = run_ias16_check(df_clean)
     results_ifrs9 = run_ifrs9_check(df_clean)
     results_ifrs16 = run_ifrs16_check(df_clean)
     
-    all_findings = pd.concat([results_ias2, results_ias16, results_ifrs9, results_ifrs16], ignore_index=True)
+    all_findings = pd.concat([results_balance, results_ias2, results_ias16, results_ifrs9, results_ifrs16], ignore_index=True)
     return all_findings
 
 # ---------------------------------------------------------
@@ -179,7 +213,7 @@ def generate_audit_pdf(audit_results_df, user_name="Osama Abbas", user_role="Chi
     cell_style = ParagraphStyle('CStyle', parent=styles['Normal'], fontName='Helvetica', fontSize=9, leading=11)
     
     story.append(Paragraph("<b>SAEIS - Executive Audit & Compliance Report</b>", title_style))
-    story.append(Paragraph(f"<b>Prepared By:</b> {user_name} ({user_role}) | <b>System Engine:</b> SAEIS v1.0", subtitle_style))
+    story.append(Paragraph(f"<b>Prepared By:</b> {user_name} ({user_role}) | <b>System Engine:</b> SAEIS Enterprise v1.2", subtitle_style))
     story.append(Spacer(1, 10))
     
     total_findings = len(audit_results_df) if not audit_results_df.empty else 0
@@ -198,7 +232,8 @@ def generate_audit_pdf(audit_results_df, user_name="Osama Abbas", user_role="Chi
             std = str(row.get('Standard', ''))
             item = str(row.get('Item', ''))
             risk = str(row.get('Risk_Level', ''))
-            issue = f"<b>Finding:</b> {row.get('Issue', '')}<br/><b>Adjusting Entry:</b> {row.get('Adjusting_Entry', '')}"
+            engine_src = row.get('Engine_Source', 'Rule-Based Engine')
+            issue = f"<b>Finding:</b> {row.get('Issue', '')}<br/><b>Adjusting Entry:</b> {row.get('Adjusting_Entry', '')}<br/><font color='#6B7280'><i>Source: {engine_src}</i></font>"
             
             table_data.append([
                 Paragraph(std, cell_style),
@@ -324,7 +359,6 @@ tabs = st.tabs([TXT["tab1"][L], TXT["tab2"][L], TXT["tab3"][L], TXT["tab4"][L]])
 with tabs[0]:
     st.subheader("استيراد البيانات والربط الشامل مع مختلف أنظمة ERP" if L == "AR" else "Data Upload & Universal ERP API Integration")
     
-    # قسم تنزيل الملف النموذجي للاختبار
     col_dl1, col_dl2 = st.columns([3, 1])
     with col_dl1:
         st.info("💡 **هل تريد ملف إكسل مجهز للاختبار؟** يمكنك تنزيل ملف الاختبار النموذجي الذي يحتوي على قيود تغطي كافة معايير IFRS/IAS المبرمجة." if L == "AR" else "💡 Download sample Excel file for testing.")
@@ -433,9 +467,12 @@ with tabs[1]:
         else:
             for idx, row in results_df.iterrows():
                 badge_color = "red" if row["Risk_Level"] == "High" else "orange"
+                engine_src = row.get("Engine_Source", "Rule-Based Deterministic Engine")
+                
                 with st.expander(f"[{row['Standard']}] {row['Item']} - مستوى المخاطرة: :{badge_color}[{row['Risk_Level']}]"):
                     st.write(f"**المشكلة المكتشفة:** {row['Issue']}")
                     st.info(f"💡 **القيد التصحيحي المقترح:**\n\n`{row['Adjusting_Entry']}`")
+                    st.caption(f"⚙️ **مصدر التوصية وموثوقية المحرك:** `{engine_src}`")
         
         st.write("")
         pdf_buffer = generate_audit_pdf(results_df, user_name=st.session_state.get('user_name', 'Osama Abbas'), user_role=st.session_state.get('user_role', 'Chief Auditor'))
@@ -448,18 +485,34 @@ with tabs[1]:
             use_container_width=True
         )
 
-# --- Tab 3 ---
+# --- Tab 3 (المخططات الموزونة حسب القيمة المالية) ---
 with tabs[2]:
-    st.subheader("📊 تحليلات المخاطر والامتثال المحاسبي" if L == "AR" else "📊 Compliance & Audit Risk Dashboard")
+    st.subheader("📊 تحليلات المخاطر والامتثال المحاسبي (الموزونة مالياً)" if L == "AR" else "📊 Compliance & Weighted Risk Dashboard")
     df_clean = standardize_columns(st.session_state.get("audit_data", pd.DataFrame()))
     
-    if "Standard" in df_clean.columns or "Account" in df_clean.columns:
+    if "Account" in df_clean.columns and "Debit" in df_clean.columns:
         col_chart1, col_chart2 = st.columns(2)
         with col_chart1:
-            fig_status = px.pie(df_clean, names="Account" if "Account" in df_clean.columns else None, title="توزيع البيانات حسب الحسابات المحاسبية", color_discrete_sequence=px.colors.qualitative.Set2)
+            # (3) المخطط الدائري الموزون مالياً % بناءً على مبالغ Debit وليس عدد القيود
+            df_clean['Debit_Num'] = pd.to_numeric(df_clean['Debit'], errors='coerce').fillna(0)
+            fig_status = px.pie(
+                df_clean, 
+                values="Debit_Num", 
+                names="Account", 
+                title="توزيع التركز المالي والترجيح النسبي للحسابات (%)",
+                color_discrete_sequence=px.colors.qualitative.Set2
+            )
             st.plotly_chart(fig_status, use_container_width=True)
+            
         with col_chart2:
-            fig_risk = px.bar(df_clean, x="Account" if "Account" in df_clean.columns else None, y="Debit" if "Debit" in df_clean.columns else None, title="حجم المبالغ المدينة حسب الحساب", barmode="group")
+            fig_risk = px.bar(
+                df_clean, 
+                x="Account", 
+                y="Debit_Num", 
+                title="حجم المبالغ المدينة لكل حساب (بالقيمة)",
+                color="Account",
+                barmode="group"
+            )
             st.plotly_chart(fig_risk, use_container_width=True)
     else:
         st.info("قم بتشغيل محرك الفحص الآلي لعرض الرسوم البيانية وتحليلات المخاطر." if L == "AR" else "Run automated engine to display analytics.")
@@ -468,6 +521,7 @@ with tabs[2]:
 with tabs[3]:
     st.subheader("📚 مكتبة ودليل المعايير الدولية المعتمدة" if L == "AR" else "📚 Rules & IFRS/IAS Standard Engine")
     st.markdown("""
+    * **General Ledger Integrity**: Double-Entry Bookkeeping Validation (التحقق من توازن القيود الفردية)
     * **IAS 1**: Presentation of Financial Statements (عرض القوائم المالية)
     * **IAS 2**: Inventories - Lower of Cost or Net Realizable Value (المخزون وصافي القيمة القابلة للتحقق)
     * **IAS 16**: Property, Plant & Equipment - Capitalization vs Maintenance Expense (الأصول الثابتة والرسملة)
