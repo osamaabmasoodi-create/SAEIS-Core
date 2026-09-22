@@ -30,7 +30,7 @@ st.set_page_config(
 )
 
 SAEIS_LOGO_B64 = """
-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
+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
 """
 
 def render_saeis_logo(width=100):
@@ -41,7 +41,7 @@ def render_saeis_logo(width=100):
     )
 
 # ---------------------------------------------------------
-# 2. التصفية المعيارية والحتمية للبيانات (Pure Deterministic Cleaning Engine)
+# 2. التصفية المعيارية والحتمية للبيانات
 # ---------------------------------------------------------
 def clean_df_pure_deterministic(df):
     """
@@ -90,7 +90,7 @@ def clean_df_pure_deterministic(df):
     for col in str_cols:
         df_clean[col] = df_clean[col].astype(str).replace('nan', '').str.strip()
 
-    # 🚨 حظر حتمي مطلق لأسطر الإجمالي والفرق والمجاميع لتفادي ظاهرة (Non-Deterministic Rendering)
+    # حظر حتمي مطلق لأسطر الإجمالي والفرق والمجاميع لتفادي تكرار الحسابات
     exclude_regex = r'(إجمالي|اجمالي|المجموع|الفرق|توازن|Total|TOTAL|Sum|SUM|Difference|Imbalance|Balance)'
     df_clean = df_clean[~df_clean['Account'].astype(str).str.contains(exclude_regex, case=False, na=False, regex=True)]
     df_clean = df_clean[~df_clean['Entry_ID'].astype(str).str.contains(exclude_regex, case=False, na=False, regex=True)]
@@ -179,7 +179,6 @@ def run_ias16_check(df, threshold=5000.0):
             account_name = str(row.get('Account', '')).strip()
             debit_val = pd.to_numeric(row.get('Debit'), errors='coerce')
             
-            # التأكد من أن الحساب هو مصروف صيانة/تطوير تجاوز حد الرسملة
             if pd.notnull(debit_val) and any(kw.lower() in account_name.lower() for kw in keywords) and debit_val >= threshold:
                 findings.append({
                     "Row_ID": idx,
@@ -226,7 +225,6 @@ def run_ifrs9_check(df):
     return pd.DataFrame(findings)
 
 def run_ifrs16_check(df):
-    """تصحيح قيد IFRS 16: إثبات أصول حق الاستخدام والالتزام الدقيق وعكس مصروف الإيجار المباشر"""
     findings = []
     keywords = ['إيجار', 'ايجار', 'إيجارات', 'Lease', 'Rent']
     if 'Account' in df.columns and 'Debit' in df.columns:
@@ -452,7 +450,7 @@ with tabs[0]:
                 st.session_state.audit_ran = False
                 
                 save_journal_data(df_clean_new, user_id=st.session_state.get('user_name', 'Osama Abbas'))
-                st.success("تم استيراد الملف وتنظيفه بشكل حتمي مع استبعاد كافة أسطر المجاميع والفرق بنجاح!" if L == "AR" else "File imported & deterministically cleaned!")
+                st.success("تم استيراد الملف وتنظيفه بشكل حتمي بنجاح!" if L == "AR" else "File imported & deterministically cleaned!")
             except Exception as e:
                 st.error(f"حدث خطأ أثناء قراءة الملف: {e}")
     else:
@@ -489,35 +487,40 @@ with tabs[0]:
 with tabs[1]:
     st.subheader("جدول القيود المحاسبية التفاعلي والمراجعة البرمجية الحتمية" if L == "AR" else "Interactive Audit Journal & Deterministic Rules Verification")
     
-    # جلب البيانات وتمريرها على الدالة الحتمية لمنع أي تكرار أو تغيير أثناء الـ Rerun
+    # جلب البيانات المفلترة حتمياً
     raw_df = st.session_state.get("audit_data", pd.DataFrame())
     df_check = clean_df_pure_deterministic(raw_df)
     
-    total_debit = df_check["Debit"].sum()
-    total_credit = df_check["Credit"].sum()
-    diff = total_debit - total_credit
+    # 1. عرض الجدول التفاعلي أولاً
+    edited_df = st.data_editor(df_check, num_rows="dynamic", use_container_width=True, key="journal_editor")
     
+    # 2. حساب المجموع مباشرةً ومن واقع الجدول الفعلي المقروء والمعروض لمنع تضارب المؤشرات!
+    df_edited_clean = clean_df_pure_deterministic(edited_df)
+    
+    total_debit = df_edited_clean["Debit"].sum()
+    total_credit = df_edited_clean["Credit"].sum()
+    diff = abs(total_debit - total_credit)
+    
+    # 3. عرض البطاقات (Metrics) المتطابقة تماماً مع محتوى الجدول المعروض
     m1, m2, m3 = st.columns(3)
     m1.metric("إجمالي المدين / Total Debit", f"{total_debit:,.2f}")
     m2.metric("إجمالي الدائن / Total Credit", f"{total_credit:,.2f}")
     m3.metric("الفرق / Imbalance", f"{diff:,.2f}", delta_color="inverse" if diff != 0 else "normal")
     
-    edited_df = st.data_editor(df_check, num_rows="dynamic", use_container_width=True, key="journal_editor")
+    st.write("")
     
     col_act1, col_act2 = st.columns(2)
     with col_act1:
         if st.button("💾 حفظ التغييرات دائمًا" if L == "AR" else "💾 Save Changes Permanently", type="secondary", use_container_width=True):
-            cleaned_edited = clean_df_pure_deterministic(edited_df)
-            st.session_state.audit_data = cleaned_edited
-            save_journal_data(cleaned_edited, user_id=st.session_state.get('user_name', 'Osama Abbas'))
+            st.session_state.audit_data = df_edited_clean
+            save_journal_data(df_edited_clean, user_id=st.session_state.get('user_name', 'Osama Abbas'))
             st.success("تم حفظ التعديلات في قاعدة البيانات دائمًا بنجاح!" if L == "AR" else "Data stored permanently in database!")
             st.rerun()
             
     with col_act2:
         if st.button("⚡ تشغيل محرك الفحص الآلي الحتمي" if L == "AR" else "⚡ Run Deterministic Audit Engine", type="primary", use_container_width=True):
-            cleaned_edited = clean_df_pure_deterministic(edited_df)
-            st.session_state.audit_data = cleaned_edited
-            results = execute_full_audit(cleaned_edited)
+            st.session_state.audit_data = df_edited_clean
+            results = execute_full_audit(df_edited_clean)
             st.session_state.audit_results = results
             st.session_state.audit_ran = True
 
