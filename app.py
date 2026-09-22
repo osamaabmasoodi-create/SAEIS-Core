@@ -35,25 +35,25 @@ iVBORw0KGgoAAAANSUhEUgAAAHMAAACWCAYAAADtyrfXAAAkDUlEQVR4nO2deZwcV3Xvv+feqt6mZ9PM
 def render_saeis_logo(width=100):
     clean_b64 = "".join(SAEIS_LOGO_B64.split())
     st.markdown(
-        f'<div style="text-align: center;"><img src="data:image/png;base64,{clean_b64}" width="{width}px" style="border-radius:10px;"></div>',
+        f'<div style="text-align: center;"><img src="data:image/png;base64="{clean_b64}" width="{width}px" style="border-radius:10px;"></div>',
         unsafe_allow_html=True
     )
 
 # ---------------------------------------------------------
-# 2. تنظيف وتوحيد البيانات ومنع خطأ PyArrow
+# 2. تنظيف وتعديل البيانات وهيكلية الميزان والقيود الذكية
 # ---------------------------------------------------------
 def clean_df_for_streamlit(df):
-    """تنظيف الـ DataFrame وتحويل أنواع البيانات لمنع استثناء PyArrow"""
+    """تنظيف شامل وتجاهل أسطر الإجماليات المكررة ومنع تضخيم الأرقام"""
     if df.empty:
         return df
     
     df_clean = df.copy()
     
-    # توحيد أسماء الأعمدة إذا وجدت أسطر تعريفية
+    # البحث عن الهيدر الحقيقي وتجاوز الأسطر التعريفية
     if any('Unnamed' in str(col) for col in df_clean.columns):
         for idx, row in df_clean.iterrows():
             row_str = " ".join([str(val) for val in row.values])
-            if 'اسم الحساب' in row_str or 'الحساب' in row_str or 'مدين' in row_str or 'Account' in row_str or 'رقم الحساب' in row_str:
+            if any(kw in row_str for kw in ['اسم الحساب', 'الحساب', 'البيان', 'Account', 'رقم الحساب']):
                 df_clean.columns = df_clean.iloc[idx]
                 df_clean = df_clean.iloc[idx+1:].reset_index(drop=True)
                 break
@@ -71,7 +71,7 @@ def clean_df_for_streamlit(df):
     df_clean = df_clean.rename(columns=mapping)
     df_clean = df_clean.loc[:, ~df_clean.columns.astype(str).str.contains('^Unnamed')]
     
-    # تحويل الأرقام والنصوص لتفادي التعارض في streamlit
+    # تحويل الأرقام إلى قيم عددية
     num_cols = ['Debit', 'Credit', 'Cost', 'NRV', 'Days_Overdue']
     for col in num_cols:
         if col in df_clean.columns:
@@ -82,7 +82,13 @@ def clean_df_for_streamlit(df):
         if col in df_clean.columns:
             df_clean[col] = df_clean[col].astype(str).replace('nan', '')
 
-    return df_clean
+    # 🚨 حاسمة: استبعاد صفوف الإجمالي/المجموع من البيانات لتفادي الازدواجية والتكرار
+    total_keywords = ['إجمالي', 'اجمالي', 'المجموع', 'Total', 'TOTAL', 'Sum', 'SUM']
+    if 'Account' in df_clean.columns:
+        pattern = '|'.join(total_keywords)
+        df_clean = df_clean[~df_clean['Account'].astype(str).str.contains(pattern, case=False, na=False)]
+
+    return df_clean.reset_index(drop=True)
 
 def standardize_columns(df):
     return clean_df_for_streamlit(df)
@@ -90,10 +96,13 @@ def standardize_columns(df):
 def create_sample_excel_bytes():
     data = [
         {"Entry_ID": "JE-201", "Account": "صيانة وتطوير محركات خط الإنتاج", "Debit": 18500.0, "Credit": 0.0, "Cost": 0.0, "NRV": 0.0, "Days_Overdue": 0},
-        {"Entry_ID": "JE-202", "Account": "مخزون بضاعة بالطريق - نظارات وأجهزة", "Debit": 12000.0, "Credit": 12000.0, "Cost": 12000.0, "NRV": 9500.0, "Days_Overdue": 0},
+        {"Entry_ID": "JE-201", "Account": "النقدية والبنك", "Debit": 0.0, "Credit": 18500.0, "Cost": 0.0, "NRV": 0.0, "Days_Overdue": 0},
+        {"Entry_ID": "JE-202", "Account": "مخزون بضاعة بالطريق - نظارات وأجهزة", "Debit": 12000.0, "Credit": 0.0, "Cost": 12000.0, "NRV": 9500.0, "Days_Overdue": 0},
+        {"Entry_ID": "JE-202", "Account": "الموردين - شركة الأجهزة", "Debit": 0.0, "Credit": 12000.0, "Cost": 0.0, "NRV": 0.0, "Days_Overdue": 0},
         {"Entry_ID": "JE-203", "Account": "ذمم مدينة - شركة الشرق المتأخرة", "Debit": 35000.0, "Credit": 0.0, "Cost": 0.0, "NRV": 0.0, "Days_Overdue": 110},
-        {"Entry_ID": "JE-204", "Account": "مصروف إيجار الفرع الرئيسي", "Debit": 42000.0, "Credit": 42000.0, "Cost": 0.0, "NRV": 0.0, "Days_Overdue": 0},
-        {"Entry_ID": "JE-205", "Account": "رواتب وأجور الموظفين العمومية", "Debit": 15000.0, "Credit": 15000.0, "Cost": 0.0, "NRV": 0.0, "Days_Overdue": 0}
+        {"Entry_ID": "JE-203", "Account": "المبيعات", "Debit": 0.0, "Credit": 35000.0, "Cost": 0.0, "NRV": 0.0, "Days_Overdue": 0},
+        {"Entry_ID": "JE-204", "Account": "مصروف إيجار الفرع الرئيسي", "Debit": 42000.0, "Credit": 0.0, "Cost": 0.0, "NRV": 0.0, "Days_Overdue": 0},
+        {"Entry_ID": "JE-204", "Account": "النقدية والبنك", "Debit": 0.0, "Credit": 42000.0, "Cost": 0.0, "NRV": 0.0, "Days_Overdue": 0}
     ]
     df_sample = pd.DataFrame(data)
     output = io.BytesIO()
@@ -103,26 +112,34 @@ def create_sample_excel_bytes():
     return output
 
 # ---------------------------------------------------------
-# 3. محرك التدقيق المحسّن (Enterprise Audit Engine)
+# 3. محرك التدقيق الذكي والتفرقة بين الميزان والقيود
 # ---------------------------------------------------------
+
 def run_entry_balance_check(df):
+    """فحص توازن القيود: يُطبق فقط على ملفات القيود متعددة الأسطر ولا يُطبق على ميزان المراجعة المفرد"""
     findings = []
+    
+    # التعرف الذكي: إذا كان الملف يحتوي على أسطر مكررة في Entry_ID (أي قيود متعددة الأطراف)
     if 'Entry_ID' in df.columns and 'Debit' in df.columns and 'Credit' in df.columns:
-        grouped = df.groupby('Entry_ID')
-        for entry_id, group in grouped:
-            debit_sum = pd.to_numeric(group['Debit'], errors='coerce').sum()
-            credit_sum = pd.to_numeric(group['Credit'], errors='coerce').sum()
-            diff = abs(debit_sum - credit_sum)
-            if diff > 0.01:
-                findings.append({
-                    "Row_ID": entry_id,
-                    "Item": f"قيد/حساب رقم {entry_id}",
-                    "Standard": "General Ledger Integrity",
-                    "Issue": f"عدم توازن في القيد الفردي ({entry_id}). إجمالي المدين: {debit_sum:,.2f} | إجمالي الدائن: {credit_sum:,.2f} | الفرق: {diff:,.2f}",
-                    "Risk_Level": "High",
-                    "Adjusting_Entry": f"يتطلب مراجعة أطراف القيد {entry_id} وإدخال الطرف الدائن/المدين المفقود بمبلغ {diff:,.2f}",
-                    "Engine_Source": "Rule-Based Deterministic Engine (Double-Entry Bookkeeping Rule)"
-                })
+        # فحص إذا ما كان الملف عبارة عن قيود يومية فعلاً (يحتوي على أرقام قيود متكررة بنفس الـ Entry_ID)
+        is_journal_entries = df['Entry_ID'].duplicated().any()
+        
+        if is_journal_entries:
+            grouped = df.groupby('Entry_ID')
+            for entry_id, group in grouped:
+                debit_sum = pd.to_numeric(group['Debit'], errors='coerce').sum()
+                credit_sum = pd.to_numeric(group['Credit'], errors='coerce').sum()
+                diff = abs(debit_sum - credit_sum)
+                if diff > 0.01:
+                    findings.append({
+                        "Row_ID": entry_id,
+                        "Item": f"قيد يومية رقم {entry_id}",
+                        "Standard": "General Ledger Integrity",
+                        "Issue": f"عدم توازن في قيد اليومية ({entry_id}). إجمالي الطرف المدين: {debit_sum:,.2f} | إجمالي الطرف الدائن: {credit_sum:,.2f} | الفرق: {diff:,.2f}",
+                        "Risk_Level": "High",
+                        "Adjusting_Entry": f"تعديل أطراف القيد رقم {entry_id} لموازنة الفارق بمبلغ {diff:,.2f}",
+                        "Engine_Source": "Rule-Based Deterministic Engine (Double-Entry Journal Rule)"
+                    })
     return pd.DataFrame(findings)
 
 def run_ias2_check(df):
@@ -419,7 +436,7 @@ with tabs[0]:
                 st.session_state.audit_ran = False
                 
                 save_journal_data(df_clean_new, user_id=st.session_state.get('user_name', 'Osama Abbas'))
-                st.success("تم استيراد الملف وتنظيف أنواع البيانات دائماً بنجاح!" if L == "AR" else "File imported & persisted successfully!")
+                st.success("تم استيراد الملف واستبعاد أسطر المجاميع المكررة بنجاح!" if L == "AR" else "File imported & cleaned successfully!")
             except Exception as e:
                 st.error(f"حدث خطأ أثناء قراءة الملف: {e}")
     else:
@@ -525,18 +542,24 @@ with tabs[2]:
         col_chart1, col_chart2 = st.columns(2)
         with col_chart1:
             df_clean['Debit_Num'] = pd.to_numeric(df_clean['Debit'], errors='coerce').fillna(0)
+            
+            # فلترة أي صف إجمالي لتفادي تشويه الرسم البياني
+            total_keywords = ['إجمالي', 'اجمالي', 'المجموع', 'Total', 'TOTAL', 'Sum', 'SUM']
+            pattern = '|'.join(total_keywords)
+            df_chart = df_clean[~df_clean['Account'].astype(str).str.contains(pattern, case=False, na=False)]
+            
             fig_status = px.pie(
-                df_clean, 
+                df_chart, 
                 values="Debit_Num", 
                 names="Account", 
-                title="توزيع التركز المالي والترجيح النسبي للحسابات (%)",
+                title="توزيع التركز المالي للحسابات (استبعاد الإجماليات) %",
                 color_discrete_sequence=px.colors.qualitative.Set2
             )
             st.plotly_chart(fig_status, use_container_width=True)
             
         with col_chart2:
             fig_risk = px.bar(
-                df_clean, 
+                df_chart, 
                 x="Account", 
                 y="Debit_Num", 
                 title="حجم المبالغ المدينة لكل حساب (بالقيمة)",
@@ -551,7 +574,7 @@ with tabs[2]:
 with tabs[3]:
     st.subheader("📚 مكتبة ودليل المعايير الدولية المعتمدة" if L == "AR" else "📚 Rules & IFRS/IAS Standard Engine")
     st.markdown("""
-    * **General Ledger Integrity**: Double-Entry Bookkeeping Validation (التحقق من توازن القيود الفردية)
+    * **General Ledger Integrity**: Double-Entry Bookkeeping Validation (التحقق من توازن قيود اليومية المزدوجة)
     * **IAS 1**: Presentation of Financial Statements (عرض القوائم المالية)
     * **IAS 2**: Inventories - Lower of Cost or Net Realizable Value (المخزون وصافي القيمة القابلة للتحقق)
     * **IAS 16**: Property, Plant & Equipment - Capitalization vs Maintenance Expense (الأصول الثابتة والرسملة)
