@@ -40,18 +40,22 @@ def render_saeis_logo(width=100):
     )
 
 # ---------------------------------------------------------
-# 2. توحيد المسميات الذكي للبيانات المحاسبية وموازين المراجعة
+# 2. تنظيف وتوحيد البيانات ومنع خطأ PyArrow
 # ---------------------------------------------------------
-def standardize_columns(df):
-    df = df.dropna(how='all').dropna(axis=1, how='all')
+def clean_df_for_streamlit(df):
+    """تنظيف الـ DataFrame وتحويل أنواع البيانات لمنع استثناء PyArrow"""
+    if df.empty:
+        return df
     
-    # التعرف الآلي على صف العناوين الهيدر إذا كان يحتوي على أسطر تعريفية
-    if any('Unnamed' in str(col) for col in df.columns):
-        for idx, row in df.iterrows():
+    df_clean = df.copy()
+    
+    # توحيد أسماء الأعمدة إذا وجدت أسطر تعريفية
+    if any('Unnamed' in str(col) for col in df_clean.columns):
+        for idx, row in df_clean.iterrows():
             row_str = " ".join([str(val) for val in row.values])
             if 'اسم الحساب' in row_str or 'الحساب' in row_str or 'مدين' in row_str or 'Account' in row_str or 'رقم الحساب' in row_str:
-                df.columns = df.iloc[idx]
-                df = df.iloc[idx+1:].reset_index(drop=True)
+                df_clean.columns = df_clean.iloc[idx]
+                df_clean = df_clean.iloc[idx+1:].reset_index(drop=True)
                 break
 
     mapping = {
@@ -64,9 +68,24 @@ def standardize_columns(df):
         'رقم القيد': 'Entry_ID', 'رقم الحساب': 'Entry_ID', 'Entry_ID': 'Entry_ID'
     }
     
-    renamed_df = df.rename(columns=mapping)
-    renamed_df = renamed_df.loc[:, ~renamed_df.columns.astype(str).str.contains('^Unnamed')]
-    return renamed_df
+    df_clean = df_clean.rename(columns=mapping)
+    df_clean = df_clean.loc[:, ~df_clean.columns.astype(str).str.contains('^Unnamed')]
+    
+    # تحويل الأرقام والنصوص لتفادي التعارض في streamlit
+    num_cols = ['Debit', 'Credit', 'Cost', 'NRV', 'Days_Overdue']
+    for col in num_cols:
+        if col in df_clean.columns:
+            df_clean[col] = pd.to_numeric(df_clean[col], errors='coerce').fillna(0.0)
+            
+    str_cols = ['Account', 'Entry_ID']
+    for col in str_cols:
+        if col in df_clean.columns:
+            df_clean[col] = df_clean[col].astype(str).replace('nan', '')
+
+    return df_clean
+
+def standardize_columns(df):
+    return clean_df_for_streamlit(df)
 
 def create_sample_excel_bytes():
     data = [
@@ -86,8 +105,6 @@ def create_sample_excel_bytes():
 # ---------------------------------------------------------
 # 3. محرك التدقيق المحسّن (Enterprise Audit Engine)
 # ---------------------------------------------------------
-
-# فحص عدم التوازن على مستوى القيد الفردي
 def run_entry_balance_check(df):
     findings = []
     if 'Entry_ID' in df.columns and 'Debit' in df.columns and 'Credit' in df.columns:
@@ -199,7 +216,7 @@ def run_ifrs16_check(df):
     return pd.DataFrame(findings)
 
 def execute_full_audit(df):
-    df_clean = standardize_columns(df)
+    df_clean = clean_df_for_streamlit(df)
     results_balance = run_entry_balance_check(df_clean)
     results_ias2 = run_ias2_check(df_clean)
     results_ias16 = run_ias16_check(df_clean)
@@ -306,7 +323,7 @@ if not st.session_state.authenticated:
                     
                     db_df = load_journal_data(user_id=user_input)
                     if not db_df.empty:
-                        st.session_state.audit_data = db_df
+                        st.session_state.audit_data = clean_df_for_streamlit(db_df)
                     else:
                         default_data = pd.DataFrame([
                             {"Entry_ID": "JE-101", "Account": "صيانة مباني وإصلاحات", "Debit": 15000.0, "Credit": 15000.0, "Cost": 0.0, "NRV": 0.0, "Days_Overdue": 0},
@@ -315,7 +332,7 @@ if not st.session_state.authenticated:
                             {"Entry_ID": "JE-104", "Account": "إيجار مقرات وفروع", "Debit": 24000.0, "Credit": 24000.0, "Cost": 0.0, "NRV": 0.0, "Days_Overdue": 0},
                             {"Entry_ID": "JE-105", "Account": "خسائر انخفاض قيمة", "Debit": 5000.0, "Credit": 5000.0, "Cost": 0.0, "NRV": 0.0, "Days_Overdue": 0}
                         ])
-                        st.session_state.audit_data = default_data
+                        st.session_state.audit_data = clean_df_for_streamlit(default_data)
                         save_journal_data(default_data, user_id=user_input)
 
                     st.success("Access Granted! / تم تسجيل الدخول واسترجاع البيانات المحفوظة بنجاح")
@@ -397,12 +414,12 @@ with tabs[0]:
                 else:
                     df_new = pd.read_excel(uploaded_file)
                 
-                df_new = standardize_columns(df_new)
-                st.session_state.audit_data = df_new
+                df_clean_new = clean_df_for_streamlit(df_new)
+                st.session_state.audit_data = df_clean_new
                 st.session_state.audit_ran = False
                 
-                save_journal_data(df_new, user_id=st.session_state.get('user_name', 'Osama Abbas'))
-                st.success("تم استيراد الملف وتوحيد مسميات الأعمدة دائماً بنجاح!" if L == "AR" else "File imported & persisted successfully!")
+                save_journal_data(df_clean_new, user_id=st.session_state.get('user_name', 'Osama Abbas'))
+                st.success("تم استيراد الملف وتنظيف أنواع البيانات دائماً بنجاح!" if L == "AR" else "File imported & persisted successfully!")
             except Exception as e:
                 st.error(f"حدث خطأ أثناء قراءة الملف: {e}")
     else:
@@ -426,11 +443,12 @@ with tabs[0]:
                 erp_df = connector.fetch_data()
                 
                 if not erp_df.empty:
-                    st.session_state.audit_data = erp_df
+                    erp_clean = clean_df_for_streamlit(erp_df)
+                    st.session_state.audit_data = erp_clean
                     st.session_state.audit_ran = False
-                    save_journal_data(erp_df, user_id=st.session_state.get('user_name', 'Osama Abbas'))
+                    save_journal_data(erp_clean, user_id=st.session_state.get('user_name', 'Osama Abbas'))
                     st.success(f"✅ تمت المزامنة بنجاح من نظام [{erp_system}] وحفظ القيود في قاعدة بيانات SAEIS!" if L == "AR" else f"✅ Successfully ingested data from [{erp_system}]!")
-                    st.dataframe(erp_df.head(), use_container_width=True)
+                    st.dataframe(erp_clean.head(), use_container_width=True)
                 else:
                     st.error("تعذر جلب البيانات من نظام ERP المستهدف. تحقق من رابط الـ API والمفتاح." if L == "AR" else "Failed to fetch ERP data.")
 
@@ -439,7 +457,7 @@ with tabs[1]:
     st.subheader("جدول القيود المحاسبية التفاعلي والمراجعة البرمجية" if L == "AR" else "Interactive Audit Journal & Automated Rules Verification")
     
     df = st.session_state.get("audit_data", pd.DataFrame())
-    df_check = standardize_columns(df)
+    df_check = clean_df_for_streamlit(df)
     
     if "Debit" in df_check.columns and "Credit" in df_check.columns:
         total_debit = pd.to_numeric(df_check["Debit"], errors='coerce').sum()
@@ -456,14 +474,16 @@ with tabs[1]:
     col_act1, col_act2 = st.columns(2)
     with col_act1:
         if st.button("💾 حفظ التغييرات دائمًا" if L == "AR" else "💾 Save Changes Permanently", type="secondary", use_container_width=True):
-            st.session_state.audit_data = edited_df
-            save_journal_data(edited_df, user_id=st.session_state.get('user_name', 'Osama Abbas'))
+            cleaned_edited = clean_df_for_streamlit(edited_df)
+            st.session_state.audit_data = cleaned_edited
+            save_journal_data(cleaned_edited, user_id=st.session_state.get('user_name', 'Osama Abbas'))
             st.success("تم حفظ التعديلات في قاعدة البيانات دائمًا بنجاح!" if L == "AR" else "Data stored permanently in database!")
             
     with col_act2:
         if st.button("⚡ تشغيل محرك الفحص الآلي" if L == "AR" else "⚡ Run Audit Engine", type="primary", use_container_width=True):
-            st.session_state.audit_data = edited_df
-            results = execute_full_audit(edited_df)
+            cleaned_edited = clean_df_for_streamlit(edited_df)
+            st.session_state.audit_data = cleaned_edited
+            results = execute_full_audit(cleaned_edited)
             st.session_state.audit_results = results
             st.session_state.audit_ran = True
 
@@ -499,7 +519,7 @@ with tabs[1]:
 # --- Tab 3 ---
 with tabs[2]:
     st.subheader("📊 تحليلات المخاطر والامتثال المحاسبي (الموزونة مالياً)" if L == "AR" else "📊 Compliance & Weighted Risk Dashboard")
-    df_clean = standardize_columns(st.session_state.get("audit_data", pd.DataFrame()))
+    df_clean = clean_df_for_streamlit(st.session_state.get("audit_data", pd.DataFrame()))
     
     if "Account" in df_clean.columns and "Debit" in df_clean.columns:
         col_chart1, col_chart2 = st.columns(2)
