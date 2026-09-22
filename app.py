@@ -55,6 +55,22 @@ def standardize_columns(df):
     renamed_df = renamed_df.loc[:, ~renamed_df.columns.str.contains('^Unnamed')]
     return renamed_df
 
+# توليد ملف إكسل نموذجي للاختبار
+def create_sample_excel_bytes():
+    data = [
+        {"Entry_ID": "JE-201", "Account": "صيانة وتطوير محركات خط الإنتاج", "Debit": 18500.0, "Credit": 0.0, "Cost": 0.0, "NRV": 0.0, "Days_Overdue": 0},
+        {"Entry_ID": "JE-202", "Account": "مخزون بضاعة بالطريق - نظارات وأجهزة", "Debit": 12000.0, "Credit": 12000.0, "Cost": 12000.0, "NRV": 9500.0, "Days_Overdue": 0},
+        {"Entry_ID": "JE-203", "Account": "ذمم مدينة - شركة الشرق المتأخرة", "Debit": 35000.0, "Credit": 0.0, "Cost": 0.0, "NRV": 0.0, "Days_Overdue": 110},
+        {"Entry_ID": "JE-204", "Account": "مصروف إيجار الفرع الرئيسي", "Debit": 42000.0, "Credit": 42000.0, "Cost": 0.0, "NRV": 0.0, "Days_Overdue": 0},
+        {"Entry_ID": "JE-205", "Account": "رواتب وأجور الموظفين العمومية", "Debit": 15000.0, "Credit": 15000.0, "Cost": 0.0, "NRV": 0.0, "Days_Overdue": 0}
+    ]
+    df_sample = pd.DataFrame(data)
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df_sample.to_excel(writer, sheet_name='Audit_Test_Data', index=False)
+    output.seek(0)
+    return output
+
 # ---------------------------------------------------------
 # 3. محرك التدقيق والتحقق الآلي (IFRS/IAS Engine)
 # ---------------------------------------------------------
@@ -307,6 +323,24 @@ tabs = st.tabs([TXT["tab1"][L], TXT["tab2"][L], TXT["tab3"][L], TXT["tab4"][L]])
 # --- Tab 1 ---
 with tabs[0]:
     st.subheader("استيراد البيانات والربط الشامل مع مختلف أنظمة ERP" if L == "AR" else "Data Upload & Universal ERP API Integration")
+    
+    # قسم تنزيل الملف النموذجي للاختبار
+    col_dl1, col_dl2 = st.columns([3, 1])
+    with col_dl1:
+        st.info("💡 **هل تريد ملف إكسل مجهز للاختبار؟** يمكنك تنزيل ملف الاختبار النموذجي الذي يحتوي على قيود تغطي كافة معايير IFRS/IAS المبرمجة." if L == "AR" else "💡 Download sample Excel file for testing.")
+    with col_dl2:
+        sample_excel = create_sample_excel_bytes()
+        st.download_button(
+            label="📥 تنزيل ملف الاختبار (Excel)" if L == "AR" else "📥 Download Test File",
+            data=sample_excel,
+            file_name="SAEIS_Audit_Test_Data.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            type="secondary",
+            use_container_width=True
+        )
+    
+    st.divider()
+    
     source = st.radio("اختر مصدر البيانات:" if L == "AR" else "Select Source:", ["Excel / CSV File", "Universal ERP API Connector (Odoo, Onyx Pro, SAP, Oracle, Dynamics, Zoho, Custom)"], horizontal=True)
     
     if source == "Excel / CSV File":
